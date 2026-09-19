@@ -1,19 +1,13 @@
 <template>
   <div class="flex flex-col gap-6 py-12">
 
-    <div class="rounded-md bg-yellow-50 p-4 dark:bg-yellow-500/10 dark:outline dark:outline-yellow-500/15">
-      <div class="flex">
-        <div class="shrink-0">
-          <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5 text-yellow-400 dark:text-yellow-300">
-            <path d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" fill-rule="evenodd" />
-          </svg>
-        </div>
-        <div class="ml-3">
-          <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-100">Heads up!</h3>
-          <div class="mt-2 text-sm text-yellow-700 dark:text-yellow-100/80">
-            <p>This converter is new, and so is the PluralPort spec! Expect some bugs as we work through things :)</p>
-          </div>
-        </div>
+    <div class="flex gap-3 rounded-field border border-warning/30 bg-warning/5 px-4 py-3">
+      <TriangleAlert class="size-5 shrink-0 text-warning" />
+      <div class="flex flex-col gap-1">
+        <h3 class="m-0 text-sm font-semibold text-text-heading">Heads up!</h3>
+        <p class="m-0 text-sm text-text-secondary">
+          This converter is new, and so is the PluralPort spec! Expect some bugs as we work through things :)
+        </p>
       </div>
     </div>
 
@@ -59,10 +53,10 @@
               :key="src.id"
               type="button"
               :disabled="!src.available"
-              class="group flex flex-col items-start gap-1.5 rounded-field border bg-bg-2 px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55"
+              class="group flex flex-col items-start gap-1.5 rounded-field border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55"
               :class="sourceId === src.id
                 ? 'border-accent bg-accent/10'
-                : 'border-border enabled:hover:border-surface-4'"
+                : 'border-border bg-bg-2 enabled:hover:border-surface-4'"
               @click="src.available && (sourceId = src.id)"
             >
               <span class="flex w-full items-center justify-between gap-2">
@@ -226,10 +220,10 @@
               :key="dst.id"
               type="button"
               :disabled="!dst.available"
-              class="flex flex-col items-start gap-1.5 rounded-field border bg-bg-2 px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55"
+              class="flex flex-col items-start gap-1.5 rounded-field border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55"
               :class="destinationId === dst.id
                 ? 'border-accent bg-accent/10'
-                : 'border-border enabled:hover:border-surface-4'"
+                : 'border-border bg-bg-2 enabled:hover:border-surface-4'"
               @click="dst.available && (destinationId = dst.id)"
             >
               <span class="flex w-full items-baseline justify-between gap-2">
