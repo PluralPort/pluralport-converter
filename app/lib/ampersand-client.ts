@@ -202,7 +202,7 @@ export function systemLabel(data: AmpExport): string {
   return name || 'Ampersand system'
 }
 
-/** Number of board messages carrying a poll (the OpenPlural poll count). */
+/** Number of board messages carrying a poll (the PluralPort poll count). */
 export function pollCount(data: AmpExport): number {
   return coll<AmpBoardMessage>(data, 'boardMessages').filter(b => b.poll && typeof b.poll === 'object').length
 }

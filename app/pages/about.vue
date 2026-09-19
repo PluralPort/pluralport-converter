@@ -1,12 +1,12 @@
 <template>
   <div class="flex flex-col gap-12 py-16">
     <header class="flex flex-col gap-3">
-      <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">About PluralPort</span>
+      <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">About PluralPort Converter</span>
       <h1 class="m-0 font-display text-3xl leading-tight text-text-heading max-sm:text-2xl">
         Move your plural data between apps.
       </h1>
       <p class="m-0 text-base text-text-secondary">
-        Most plural apps store data in their own shape. PluralPort reads from one and writes to another. It's free, open source, and runs in your browser with no account needed to use.
+        Most plural apps store data in their own shape. This converter reads that shape and writes the shared PluralPort format. It's free, open source, and runs in your browser with no account needed to use.
       </p>
     </header>
 
@@ -16,7 +16,7 @@
         The plural community uses a lot of apps. From toolkit apps like Simply Plural, Octocon, and PluralSpace to proxies
         like PluralKit and Tupperbox. Each one stores data differently. Historically it's meant that apps have to add
         support to allow certain exports/imports from other apps, that's where
-        <a href="https://skylartaylor.github.io/openplural/" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">OpenPlural</a>
+        <a href="https://pluralport.com" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">PluralPort</a>
         comes in. It allows for an easy, expected format for exports and imports.
       </p>
     </section>
@@ -25,7 +25,7 @@
       <div class="flex items-baseline justify-between gap-4">
         <h2 class="m-0 font-display text-xl leading-none text-text-heading">Supported conversions</h2>
         <a
-          href="https://github.com/pluralspace/pluralport/blob/main/CONTRIBUTING.md"
+          href="https://github.com/PluralPort/pluralport-converter/blob/main/CONTRIBUTING.md"
           target="_blank"
           rel="noopener"
           class="text-sm text-text-secondary underline decoration-border underline-offset-2 hover:text-text hover:decoration-text-secondary"
@@ -65,30 +65,33 @@
     </section>
 
     <section class="flex flex-col gap-3 rounded-card border border-border bg-surface p-6">
-      <h2 class="m-0 font-display text-xl leading-none text-text-heading">Built by PluralSpace</h2>
+      <h2 class="m-0 font-display text-xl leading-none text-text-heading">About this project</h2>
       <p class="m-0 text-text-secondary">
+        PluralPort Converter started out as a
         <a href="https://pluralspace.app" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">PluralSpace</a>
-        is the app we built to give systems a cozy, safe home. We made PluralPort because we wanted anyone to be able to export their data, and keep it in a standardized format.
+        project, and is now maintained alongside the
+        <a href="https://pluralport.com" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">PluralPort</a>
+        specification. It exists so that getting your data out of an app doesn't depend on that app, or on finding some third app that happens to read both formats.
         It's free and open source. PRs are welcome!
       </p>
       <div class="flex flex-wrap gap-2 pt-1">
         <a
-          href="https://pluralspace.app"
+          href="https://pluralport.com"
           target="_blank"
           rel="noopener"
           class="inline-flex items-center gap-2 rounded-button border border-accent bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-foreground transition hover:opacity-90"
         >
-          Visit PluralSpace
+          Read the spec
           <ArrowUpRight class="size-4" />
         </a>
         <a
-          href="https://github.com/pluralspace/pluralport"
+          href="https://github.com/PluralPort/pluralport-converter"
           target="_blank"
           rel="noopener"
           class="inline-flex items-center gap-2 rounded-button border border-border px-3.5 py-1.5 text-sm font-medium text-text-secondary transition hover:border-surface-4 hover:text-text"
         >
           <Github class="size-4" />
-          View PluralPort source
+          View converter source
         </a>
       </div>
     </section>
@@ -112,7 +115,7 @@ import { computed, h } from 'vue'
 import { ArrowUpRight, ArrowRight, Check, Circle, Github } from 'lucide-vue-next'
 import { sources, destinations, converters, type SourceProvider, type DestinationFormat } from '~/lib/registry'
 
-useHead({ title: 'About PluralPort' })
+useHead({ title: 'About - PluralPort Converter' })
 
 const ConversionPath = (props: { source: SourceProvider; dest: DestinationFormat; muted?: boolean }) => {
   const labelTone = props.muted ? 'text-text-secondary' : 'text-text-heading'

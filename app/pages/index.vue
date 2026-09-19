@@ -11,7 +11,7 @@
         <div class="ml-3">
           <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-100">Heads up!</h3>
           <div class="mt-2 text-sm text-yellow-700 dark:text-yellow-100/80">
-            <p>PluralPort is new, and so is the OpenPlural spec! Expect some bugs as we work through things :)</p>
+            <p>This converter is new, and so is the PluralPort spec! Expect some bugs as we work through things :)</p>
           </div>
         </div>
       </div>
@@ -24,11 +24,11 @@
         </div>
         <div class="flex min-w-0 flex-col gap-1">
           <h1 class="m-0 font-display text-lg leading-none text-text-heading">
-            PluralPort
+            PluralPort Converter
           </h1>
           <p class="m-0 text-sm text-text-secondary">
-            Convert between plural system export formats.
-            <span class="text-text-muted">Built by PluralSpace. Open source, no login.</span>
+            Turn a plural app's export into a PluralPort file.
+            <span class="text-text-muted">Runs in your browser. Open source, no login.</span>
           </p>
         </div>
       </div>
@@ -481,7 +481,7 @@ import { countAll, verifyToken } from '~/lib/sp-client'
 import { parseAmpersand, systemLabel, countAmpersand } from '~/lib/ampersand-client'
 import type { OPWarning, TaskState } from '~/lib/converters/types'
 useHead({
-  title: 'PluralPort - Convert between plural system export formats',
+  title: 'PluralPort Converter - Turn a plural app export into a PluralPort file',
 })
 
 //TODO:: Need to document more of the functions here so it's easier to know what is actually happening and to help others add new converters
@@ -496,7 +496,7 @@ const steps: { key: StepKey; label: string }[] = [
 ]
 
 const sourceId = ref<string>('simply_plural')
-const destinationId = ref<string>('openplural_v0.1')
+const destinationId = ref<string>('pluralport_v0.1')
 
 const activeSource = computed(() => sources.find(s => s.id === sourceId.value))
 const activeDestination = computed(() => destinations.find(d => d.id === destinationId.value))

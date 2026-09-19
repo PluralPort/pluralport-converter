@@ -13,8 +13,13 @@ import {
   type AmpTag,
 } from '../ampersand-client'
 import { defineConverter, type ConverterFn, type OPWarning, type TaskState } from './types'
-
-const OPENPLURAL_VERSION = '0.1'
+import {
+  EXPORTER_NAMESPACE,
+  EXPORTER_VERSION,
+  PLURALPORT_VERSION,
+  exporterExtension,
+  pluralportFilename,
+} from '../pluralport'
 
 function newUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -23,7 +28,7 @@ function newUUID(): string {
   })
 }
 
-/** Ampersand rows already carry UUIDs; reuse them as OpenPlural ids so
+/** Ampersand rows already carry UUIDs; reuse them as PluralPort ids so
  *  cross-references (member.system, member.tags, member.customFields keys)
  *  line up without an id map. Missing/blank -> a fresh UUID. */
 function idOf(row: { uuid?: string }): string {
@@ -51,7 +56,7 @@ function hexColor(raw?: unknown): string | null {
 }
 
 /** Ampersand is local-first with no sharing model, so everything is
- *  private; carry the OpenPlural Privacy object shape all the same. */
+ *  private; carry the PluralPort Privacy object shape all the same. */
 function ampPrivacy(): { visibility: string; source: unknown } {
   return { visibility: 'private', source: {} }
 }
@@ -60,7 +65,7 @@ function sourceRef(collection: string, id?: string) {
   return { app: 'ampersand', collection, id: id ?? null }
 }
 
-/** Collects inline base64 images into deduplicated OpenPlural Assets. */
+/** Collects inline base64 images into deduplicated PluralPort Assets. */
 class AssetTable {
   private byUri = new Map<string, string>()
   readonly assets: object[] = []
@@ -104,7 +109,7 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
   if (has('boards'))        wantedTasks.push({ key: 'boards',        label: 'Message Board',  status: 'pending' })
   if (has('polls'))         wantedTasks.push({ key: 'polls',         label: 'Polls',         status: 'pending' })
   if (has('images'))        wantedTasks.push({ key: 'images',        label: 'Images',        status: 'pending' })
-  wantedTasks.push({ key: 'build', label: 'Building OpenPlural file', status: 'pending' })
+  wantedTasks.push({ key: 'build', label: 'Building PluralPort file', status: 'pending' })
   cb.initTasks(wantedTasks)
 
   const warnings: OPWarning[] = []
@@ -122,7 +127,7 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
   const assets = new AssetTable()
   const imagesEnabled = has('images')
 
-  // --- Systems (Ampersand systems map to OpenPlural systems, nested) ----
+  // --- Systems (Ampersand systems map to PluralPort systems, nested) ----
   cb.updateTask('system', { status: 'running' })
   const ampSystems = coll<AmpSystem>(data, 'systems')
   const systemIds = new Set(ampSystems.map(s => idOf(s)))
@@ -504,7 +509,7 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
   if (opPolls.length)             capModules.push('polls')
   if (assets.assets.length)       capModules.push('assets')
 
-  // File-level Ampersand extras with no OpenPlural v0.1 core home. Config
+  // File-level Ampersand extras with no PluralPort v0.1 core home. Config
   // is deliberately excluded (it carries the app-lock password hash and
   // other device settings that are not the user's system data).
   const fileExtensions: Record<string, unknown> = {}
@@ -515,17 +520,18 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
   if (data.revision) fileExtensions.revision = data.revision
 
   const envelope = {
-    openplural_version: OPENPLURAL_VERSION,
+    pluralport_version: PLURALPORT_VERSION,
     exported_at: new Date().toISOString(),
+    // SPEC-OPEN(producer-exporter): producer.app is the *source* app, not this
+    // tool, because source_refs and the extensions namespace both key off it.
+    // The spec gives us producer.exporter_version but no slot naming which
+    // converter produced the file, so our identity goes in extensions below.
+    // If the spec gains producer.exporter/exporter_id, move it back up here.
     producer: {
       app: 'Ampersand',
       app_id: 'ampersand',
       app_version: data.revision?.humanReadable ?? 'unknown',
-    },
-    exporter: {
-      name: 'PluralPort',
-      version: '0.1.0',
-      url: 'https://github.com/pluralspace/pluralport',
+      exporter_version: EXPORTER_VERSION,
     },
     capabilities: { modules: capModules },
 
@@ -548,24 +554,25 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
     relationships: null,
     polls:         opPolls.length ? { polls: opPolls } : null,
 
-    extensions: Object.keys(fileExtensions).length ? { ampersand: fileExtensions } : {},
+    // SPEC-OPEN(producer-exporter): see the producer note above.
+    extensions: {
+      [EXPORTER_NAMESPACE]: exporterExtension(),
+      ...(Object.keys(fileExtensions).length ? { ampersand: fileExtensions } : {}),
+    },
     warnings,
   }
 
   const json = JSON.stringify(envelope, null, 2)
   cb.updateTask('build', { status: 'done', count: 1 })
 
-  const date = new Date().toISOString().slice(0, 10)
-  const slug = (opSystems[0] as { name?: string } | undefined)?.name
-  const cleanSlug = (slug ?? 'system').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system'
-  const filename = `openplural-v${OPENPLURAL_VERSION}-${cleanSlug}-${date}.json`
+  const filename = pluralportFilename((opSystems[0] as { name?: string } | undefined)?.name)
 
   return { json, filename }
 }
 
 export const converter = defineConverter({
   sourceId: 'ampersand',
-  destinationId: 'openplural_v0.1',
+  destinationId: 'pluralport_v0.1',
   modules: ['members', 'custom_fronts', 'fronting', 'notes', 'tags', 'custom_fields', 'boards', 'polls', 'images'],
   run: runAmpersandToOp,
 })

@@ -9,8 +9,13 @@ import {
   type SpUser,
 } from '../sp-client'
 import { defineConverter, type ConverterFn, type OPWarning, type TaskState } from './types'
-
-const OPENPLURAL_VERSION = '0.1'
+import {
+  EXPORTER_NAMESPACE,
+  EXPORTER_VERSION,
+  PLURALPORT_VERSION,
+  exporterExtension,
+  pluralportFilename,
+} from '../pluralport'
 
 function newUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -129,7 +134,7 @@ export const runSpToOp: ConverterFn = async (input, options, cb) => {
   if (selectedModules.includes('fronting'))      wantedTasks.push({ key: 'fronting',      label: 'Front History', status: 'pending' })
   if (selectedModules.includes('notes'))         wantedTasks.push({ key: 'notes',         label: 'Notes',         status: 'pending' })
   if (selectedModules.includes('polls'))         wantedTasks.push({ key: 'polls',         label: 'Polls',         status: 'pending' })
-  wantedTasks.push({ key: 'build', label: 'Building OpenPlural file', status: 'pending' })
+  wantedTasks.push({ key: 'build', label: 'Building PluralPort file', status: 'pending' })
 
   cb.initTasks(wantedTasks)
 
@@ -378,17 +383,18 @@ export const runSpToOp: ConverterFn = async (input, options, cb) => {
   if (opPollsModule)         capModules.push('polls')
 
   const envelope = {
-    openplural_version: OPENPLURAL_VERSION,
+    pluralport_version: PLURALPORT_VERSION,
     exported_at: new Date().toISOString(),
+    // SPEC-OPEN(producer-exporter): producer.app is the *source* app, not this
+    // tool, because source_refs and the extensions namespace both key off it.
+    // The spec gives us producer.exporter_version but no slot naming which
+    // converter produced the file, so our identity goes in extensions below.
+    // If the spec gains producer.exporter/exporter_id, move it back up here.
     producer: {
       app: 'Simply Plural',
       app_id: 'simply_plural',
       app_version: 'v1',
-    },
-    exporter: {
-      name: 'PluralPort',
-      version: '0.1.0',
-      url: 'https://github.com/pluralspace/pluralport',
+      exporter_version: EXPORTER_VERSION,
     },
     capabilities: { modules: capModules },
 
@@ -411,23 +417,22 @@ export const runSpToOp: ConverterFn = async (input, options, cb) => {
     relationships: null,
     polls:         opPollsModule,
 
-    extensions: {},
+    // SPEC-OPEN(producer-exporter): see the producer note above.
+    extensions: { [EXPORTER_NAMESPACE]: exporterExtension() },
     warnings,
   }
 
   const json = JSON.stringify(envelope, null, 2)
   cb.updateTask('build', { status: 'done', count: 1 })
 
-  const date = new Date().toISOString().slice(0, 10)
-  const slug = (spUser.username || 'system').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system'
-  const filename = `openplural-v${OPENPLURAL_VERSION}-${slug}-${date}.json`
+  const filename = pluralportFilename(spUser.username)
 
   return { json, filename }
 }
 
 export const converter = defineConverter({
   sourceId: 'simply_plural',
-  destinationId: 'openplural_v0.1',
+  destinationId: 'pluralport_v0.1',
   modules: ['members', 'custom_fronts', 'groups', 'fronting', 'notes', 'polls'],
   run: runSpToOp,
 })

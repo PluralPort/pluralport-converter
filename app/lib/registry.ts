@@ -14,8 +14,8 @@ import {
     User,
     VenetianMask,
 } from 'lucide-vue-next'
-import {converter as spToOpenPlural} from './converters/sp-to-op'
-import {converter as ampersandToOpenPlural} from './converters/ampersand-to-op'
+import {converter as spToPluralPort} from './converters/sp-to-op'
+import {converter as ampersandToPluralPort} from './converters/ampersand-to-op'
 import type {Converter} from './converters/types'
 
 export type ConnectionType = 'token' | 'file' | 'oauth'
@@ -87,8 +87,8 @@ export const sources: SourceProvider[] = [
 
 export const destinations: DestinationFormat[] = [
     {
-        id: 'openplural_v0.1',
-        name: 'OpenPlural',
+        id: 'pluralport_v0.1',
+        name: 'PluralPort',
         version: 'v0.1 (draft)',
         description: 'Open standard for plural system data',
         available: true,
@@ -158,8 +158,8 @@ export const destinations: DestinationFormat[] = [
 ]
 
 export const converters: Converter[] = [
-    spToOpenPlural,
-    ampersandToOpenPlural,
+    spToPluralPort,
+    ampersandToPluralPort,
 ]
 
 export function findConverter(sourceId: string, destinationId: string): Converter | undefined {

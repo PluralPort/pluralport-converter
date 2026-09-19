@@ -1,5 +1,5 @@
 {
-  "name": "pluralport",
+  "name": "pluralport-converter",
   "type": "module",
   "private": true,
   "scripts": {

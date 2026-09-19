@@ -7,7 +7,7 @@
       </h1>
       <p class="m-0 max-w-2xl text-base text-text-secondary">
         Common questions, short answers. Missing one? Open an
-        <a href="https://github.com/pluralspace/pluralport/issues" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">issue on GitHub</a>.
+        <a href="https://github.com/PluralPort/pluralport-converter/issues" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">issue on GitHub</a>.
       </p>
     </header>
 
@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { ChevronRight } from 'lucide-vue-next'
 
-useHead({ title: 'FAQ - PluralPort' })
+useHead({ title: 'FAQ - PluralPort Converter' })
 
 interface FaqItem { q: string; a: string[] }
 interface FaqGroup { heading: string; items: FaqItem[] }
@@ -64,7 +64,7 @@ const faqs: FaqGroup[] = [
         ],
       },
       {
-        q: 'Do I need an PluralPort or PluralSpace account?',
+        q: 'Do I need an account?',
         a: [
           'Nope! It runs in your browser against whichever source you connect to, using either the tokens or (in the future) the JSON files to convert the standards.',
         ],
@@ -77,20 +77,21 @@ const faqs: FaqGroup[] = [
       {
         q: 'Why isn\'t my source/destination available yet?',
         a: [
-          'PluralPort is new. Simply Plural to OpenPlural shipped first because that\'s what PluralSpace needed (and to help people get their SimplyPlural data in a standardized format). The rest are listed as "Soon" on the <a href="/about" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">About page</a>.',
+          'This converter is new, and so is the spec. Converters get written roughly in order of how badly people need them, which usually means apps that are shutting down or have no other way out. The rest are listed as "Soon" on the <a href="/about" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">About page</a>.',
           'If you need a specific pairing, open an issue or send a PR! A new converter is one file plus a registry entry.',
         ],
       },
       {
-        q: 'What is OpenPlural?',
+        q: 'What is PluralPort?',
         a: [
-          'An open standard for plural system data that any app can read or write. Current draft is v0.1. Read the <a href="https://skylartaylor.github.io/openplural/" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">spec</a> for details.',
+          'An open standard for plural system data that any app can read or write. Current draft is v0.1. Read the <a href="https://pluralport.com" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">spec</a> for details.',
         ],
       },
       {
-        q: 'Can I import an PluralPort export into PluralSpace?',
+        q: 'Can I import a PluralPort file into my app?',
         a: [
-          'It will! PluralSpace is working on adding an OpenPlural importer. Convert your data here, then upload the OpenPlural file from PluralSpace\'s import settings when it\'s available.',
+          'That depends on the app. PluralPort is a young spec, and each app has to add its own importer. The <a href="https://pluralport.com" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">spec site</a> tracks which apps read and write the format.',
+          'If your destination app doesn\'t support PluralPort yet, converting still gets your data into an open, documented format that isn\'t going anywhere when an app does.',
         ],
       },
     ],
@@ -108,13 +109,13 @@ const faqs: FaqGroup[] = [
       {
         q: 'Where do I report bugs?',
         a: [
-          'Open an issue on <a href="https://github.com/pluralspace/pluralport/issues" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">GitHub</a>. Mention the source, destination, and any warnings you saw.',
+          'Open an issue on <a href="https://github.com/PluralPort/pluralport-converter/issues" target="_blank" rel="noopener" class="text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent">GitHub</a>. Mention the source, destination, and any warnings you saw.',
         ],
       },
       {
         q: 'Is this affiliated with the apps it converts from?',
         a: [
-          'No, PluralPort is built by PluralSpace. It\'s not affiliated with or endorsed by Simply Plural, Octocon, Tupperbox, or any other app it reads from. Logos and product names belong to their respective owners.',
+          'No. This converter started as a PluralSpace project and is now maintained alongside the PluralPort spec. It\'s not affiliated with or endorsed by Simply Plural, Octocon, Tupperbox, or any other app it reads from. Logos and product names belong to their respective owners.',
         ],
       },
     ],

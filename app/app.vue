@@ -6,7 +6,7 @@
           <span class="flex size-7 items-center justify-center rounded-field border border-border bg-surface text-accent">
             <Repeat class="size-4" :stroke-width="2" />
           </span>
-          <span class="font-display text-base leading-none">PluralPort</span>
+          <span class="font-display text-base leading-none">PluralPort Converter</span>
         </NuxtLink>
 
         <nav class="flex items-center gap-1 text-sm">
@@ -20,7 +20,7 @@
             {{ link.label }}
           </NuxtLink>
           <a
-            href="https://github.com/pluralspace/pluralport"
+            href="https://github.com/PluralPort/pluralport-converter"
             target="_blank"
             rel="noopener"
             class="ml-1 inline-flex items-center gap-1.5 rounded-button border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition hover:border-surface-4 hover:text-text"
@@ -45,24 +45,24 @@
             <span class="flex size-6 items-center justify-center rounded border border-border bg-surface text-accent">
               <Repeat class="size-3.5" :stroke-width="2" />
             </span>
-            <span class="font-display text-sm leading-none">PluralPort</span>
+            <span class="font-display text-sm leading-none">PluralPort Converter</span>
           </NuxtLink>
           <p class="m-0 max-w-xs text-xs text-text-muted">
-            Convert between plural system export formats. Built by PluralSpace, open source.
+            Turn a plural app's export into a PluralPort file. Runs in your browser, open source.
           </p>
         </div>
 
         <div class="flex flex-col gap-2">
           <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Resources</div>
-          <a href="https://skylartaylor.github.io/openplural/" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">OpenPlural spec</a>
+          <a href="https://pluralport.com" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">PluralPort spec</a>
           <a href="https://pluralspace.app" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">PluralSpace</a>
-          <a href="https://github.com/pluralspace/pluralport" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">GitHub</a>
+          <a href="https://github.com/PluralPort/pluralport-converter" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">GitHub</a>
         </div>
 
         <div class="flex flex-col gap-2">
           <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Contribute</div>
-          <a href="https://github.com/pluralspace/pluralport/issues" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">Report a bug</a>
-          <a href="https://github.com/pluralspace/pluralport/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">Add a converter</a>
+          <a href="https://github.com/PluralPort/pluralport-converter/issues" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">Report a bug</a>
+          <a href="https://github.com/PluralPort/pluralport-converter/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="text-sm text-text-secondary hover:text-text">Add a converter</a>
         </div>
       </div>
 
@@ -75,7 +75,7 @@
             </span>
           </div>
           <p class="m-0 pl-[22px] text-text-faint">
-            Logos, product names, and trademarks shown on this site are the property of their respective owners. PluralPort is built by PluralSpace and is not affiliated with or endorsed by Simply Plural or Octocon.
+            Logos, product names, and trademarks shown on this site are the property of their respective owners. This converter is not affiliated with or endorsed by any of the apps it reads from.
           </p>
         </div>
       </div>
