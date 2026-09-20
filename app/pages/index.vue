@@ -86,58 +86,7 @@
           </div>
         </div>
 
-        <!--
-          TODO:: Look at how this can be simplified, maybe moving to the converter as a variable so it is not hard coded into the HTML?
-          -->
-        <template v-if="sourceId === 'simply_plural'">
-          <div class="flex flex-col gap-3 border-t border-border pt-5">
-            <p class="m-0 text-sm text-text-secondary">
-              Requests go through a small proxy (needed for CORS). The token isn't logged or stored.
-            </p>
-
-            <details class="group rounded-field border border-border bg-bg-2 open:border-accent/40">
-              <summary class="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold text-text">
-                <ChevronRight class="size-4 text-text-secondary transition-transform group-open:rotate-90" />
-                <span>How to get a token from Simply Plural</span>
-              </summary>
-              <ol class="m-0 flex list-decimal flex-col gap-1.5 border-t border-border/60 px-3.5 py-3 pl-9 text-[13px] text-text-secondary marker:text-text-muted marker:tabular-nums">
-                <li>Open the Simply Plural app.</li>
-                <li>Open the side menu (hamburger icon).</li>
-                <li>Tap the gear icon.</li>
-                <li>Go to <span class="text-text-heading">Account</span>.</li>
-                <li>Open <span class="text-text-heading">Tokens</span>.</li>
-                <li>Tap <span class="text-text-heading">Add Token</span> and choose <span class="rounded bg-accent/15 px-1.5 py-0.5 font-semibold text-accent">Read Only</span>.</li>
-                <li>Tap and hold the new token for 2 seconds to copy it.</li>
-              </ol>
-            </details>
-
-            <div class="flex flex-col gap-2">
-              <label for="token" class="text-[13px] font-semibold text-text-heading">Token</label>
-              <div class="flex gap-1.5">
-                <input
-                  id="token"
-                  v-model="apiKey"
-                  :type="showKey ? 'text' : 'password'"
-                  class="focus-accent-ring w-full rounded-field border border-border bg-bg-2 px-3.5 py-[11px] font-mono text-[13px] text-text"
-                  placeholder="Paste your SP token"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button
-                  type="button"
-                  class="inline-flex shrink-0 items-center justify-center rounded-button border border-border bg-bg-2 px-3 text-text-secondary transition hover:border-surface-4 hover:bg-surface hover:text-text"
-                  :aria-label="showKey ? 'Hide token' : 'Show token'"
-                  @click="showKey = !showKey"
-                >
-                  <EyeOff v-if="showKey" class="size-4" />
-                  <Eye v-else class="size-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <template v-else-if="activeSource?.connectionType === 'file'">
+        <template v-if="activeSource?.connectionType === 'file'">
           <div class="flex flex-col gap-3 border-t border-border pt-5">
             <p class="m-0 text-sm text-text-secondary">
               Your export is read and converted entirely in your browser. The file never leaves your device.
@@ -460,8 +409,6 @@ import {
   Circle,
   CircleAlert,
   Download,
-  Eye,
-  EyeOff,
   Loader2,
   Minus,
   Repeat,
@@ -471,7 +418,6 @@ import {
 } from 'lucide-vue-next'
 
 import { sources, destinations, findConverter } from '~/lib/registry'
-import { countAll, verifyToken } from '~/lib/sp-client'
 import { parseAmpersand, systemLabel, countAmpersand } from '~/lib/ampersand-client'
 import type { OPWarning, TaskState } from '~/lib/converters/types'
 useHead({
@@ -489,8 +435,10 @@ const steps: { key: StepKey; label: string }[] = [
   { key: 'convert',   label: 'Convert' },
 ]
 
-const sourceId = ref<string>('simply_plural')
-const destinationId = ref<string>('pluralport_v0.1')
+// Open on something the visitor can actually use, rather than a hardcoded
+// source that may be unavailable and would dead-end on Continue.
+const sourceId = ref<string>(sources.find(s => s.available)?.id ?? '')
+const destinationId = ref<string>(destinations.find(d => d.available)?.id ?? '')
 
 const activeSource = computed(() => sources.find(s => s.id === sourceId.value))
 const activeDestination = computed(() => destinations.find(d => d.id === destinationId.value))
@@ -511,12 +459,9 @@ watch(availableModules, (mods) => {
   selectedModules.value = mods.map(m => m.key)
 }, { immediate: true })
 
-const apiKey = ref('')
-const showKey = ref(false)
 const verifying = ref(false)
 const authError = ref('')
 const systemName = ref('')
-const userId = ref('')
 
 // File-source state (Ampersand and any future file importers).
 const sourceFile = ref<File | null>(null)
@@ -524,9 +469,7 @@ const fileText = ref('')
 
 const canContinue = computed(() => {
   if (verifying.value) return false
-  const t = activeSource.value?.connectionType
-  if (t === 'token') return !!apiKey.value.trim()
-  if (t === 'file') return !!sourceFile.value
+  if (activeSource.value?.connectionType === 'file') return !!sourceFile.value
   return false
 })
 
@@ -547,25 +490,18 @@ async function connectAndProceed() {
   authError.value = ''
   verifying.value = true
   try {
-    const connType = activeSource.value?.connectionType
-    if (connType === 'token') {
-      const { userId: uid, systemName: name } = await verifyToken(apiKey.value)
-      userId.value = uid
-      systemName.value = name
-      step.value = 'configure'
-      fetchCounts()
-    } else if (connType === 'file') {
-      if (!sourceFile.value) throw new Error('Choose an export file first.')
-      const text = await sourceFile.value.text()
-      const parsed = parseAmpersand(text) // throws a user-facing message on a bad file
-      fileText.value = text
-      userId.value = ''
-      systemName.value = systemLabel(parsed)
-      step.value = 'configure'
-      applyLocalCounts(countAmpersand(parsed))
+    if (activeSource.value?.connectionType !== 'file') {
+      throw new Error('That source has no importer yet.')
     }
+    if (!sourceFile.value) throw new Error('Choose an export file first.')
+    const text = await sourceFile.value.text()
+    const parsed = parseAmpersand(text) // throws a user-facing message on a bad file
+    fileText.value = text
+    systemName.value = systemLabel(parsed)
+    step.value = 'configure'
+    applyLocalCounts(countAmpersand(parsed))
   } catch (e) {
-    authError.value = e instanceof Error ? e.message : 'Could not connect. Check your credentials.'
+    authError.value = e instanceof Error ? e.message : 'Could not read that export file.'
   } finally {
     verifying.value = false
   }
@@ -581,22 +517,6 @@ function applyLocalCounts(counts: Record<string, number>) {
 
 type CountState = { status: 'loading' } | { status: 'ok'; value: number } | { status: 'error' }
 const moduleCounts = ref<Record<string, CountState>>({})
-
-function fetchCounts() {
-  if (sourceId.value !== 'simply_plural') return
-  const init: Record<string, CountState> = {}
-  for (const m of activeDestination.value?.modules ?? []) init[m.key] = { status: 'loading' }
-  moduleCounts.value = init
-
-  // TODO: Known issue here, same as below... counting all can cause hundreds or thousands of requests which can take a while or cause OOM errors. Maybe only apply counts to the specific fields that aren't constrained? eg: SP notes are by member, thousands of members = N+X calls depending on pagination to get a total count
-  countAll(apiKey.value, userId.value, (key, value) => {
-    if (value === 'error') {
-      moduleCounts.value = { ...moduleCounts.value, [key]: { status: 'error' } }
-    } else {
-      moduleCounts.value = { ...moduleCounts.value, [key]: { status: 'ok', value } }
-    }
-  })
-}
 
 function countDisplay(key: string): string {
   const c = moduleCounts.value[key]
@@ -645,11 +565,8 @@ async function runConversion() {
   }
 
   try {
-    // TODO: Known issue with client side fetching! 6 requests at a time and could run into OOM errors especially on mobile. Need to look at refactoring with possibly a streaming JSON converter or chunking requests
     const result = await converter.run(
       {
-        token: apiKey.value,
-        userId: userId.value,
         fileText: fileText.value,
         fileName: sourceFile.value?.name,
       },

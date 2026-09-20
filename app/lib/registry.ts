@@ -14,10 +14,19 @@ import {
     User,
     VenetianMask,
 } from 'lucide-vue-next'
-import {converter as spToPluralPort} from './converters/sp-to-op'
 import {converter as ampersandToPluralPort} from './converters/ampersand-to-op'
 import type {Converter} from './converters/types'
 
+/**
+ * Every source is an export file the visitor picks, so nothing leaves the
+ * browser and the site can be served as static files with nothing behind it.
+ *
+ * 'token' and 'oauth' are kept only so a future source can be added for an
+ * API that sends CORS headers and can be called from the page directly. They
+ * must never come back via a proxy we operate: a proxy sees the credential
+ * and the plaintext system data, which is exactly what this tool promises
+ * not to do.
+ */
 export type ConnectionType = 'token' | 'file' | 'oauth'
 
 export interface SourceProvider {
@@ -50,11 +59,11 @@ export const sources: SourceProvider[] = [
     {
         id: 'simply_plural',
         name: 'Simply Plural',
-        description: 'Connect via API token',
+        description: 'Convert an Export',
         logo: '/logos/simplyplural.png',
         icon: Boxes,
-        available: true,
-        connectionType: 'token',
+        available: false,
+        connectionType: 'file',
     },
     {
         id: 'ampersand',
@@ -77,11 +86,11 @@ export const sources: SourceProvider[] = [
     {
         id: 'pluralspace',
         name: 'PluralSpace',
-        description: 'Connect via API token',
+        description: 'Convert an Export',
         logo: '/logos/pluralspace.jpg',
         icon: Layers,
         available: false,
-        connectionType: 'token',
+        connectionType: 'file',
     },
 ]
 
@@ -158,7 +167,6 @@ export const destinations: DestinationFormat[] = [
 ]
 
 export const converters: Converter[] = [
-    spToPluralPort,
     ampersandToPluralPort,
 ]
 

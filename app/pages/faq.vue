@@ -52,21 +52,21 @@ const faqs: FaqGroup[] = [
       {
         q: 'Where does my data go?',
         a: [
-          'It\'s fetched from whichever source you connect to (Simply Plural\'s API, for now), converted in your browser, and written to a file you download. None of it touches our servers.',
-          'Some source APIs won\'t accept requests directly from a browser, so we forward those through a small proxy. It doesn\'t log, store, or inspect anything. It\'s there to satisfy CORS that are required by SimplyPlural. The source is on GitHub if you want to look.',
+          'Nowhere. You pick an export file from your device, it\'s read and converted in the page you already have open, and the result is written straight back to a file you download.',
+          'There is no server to send it to. This site is a set of static files, and the converted page makes no requests to anything except the site it was served from. You can verify that yourself in your browser\'s network tab, or read the source.',
         ],
       },
       {
-        q: 'Is my API token saved anywhere?',
+        q: 'Do I have to give you an API token?',
         a: [
-          'No. It lives in your browser tab while you\'re using the converter, and gets sent as a header to the source API through our proxy. The proxy doesn\'t log or store it.',
-          'Close the tab and the token is gone. Use a <strong>Read Only</strong> token from Simply Plural so even in the worst case it can\'t change anything in your system.',
+          'No, and we\'d rather you never had to. Every source is an export file instead.',
+          'Most plural apps issue tokens that carry your whole account, with no way to limit what they can do, so pasting one into any third-party site means trusting that site completely and rotating the token afterwards. Choosing a file avoids that entirely.',
         ],
       },
       {
         q: 'Do I need an account?',
         a: [
-          'Nope! It runs in your browser against whichever source you connect to, using either the tokens or (in the future) the JSON files to convert the standards.',
+          'Nope. There\'s nothing to sign up for and nothing to log in to. Open the page, pick your export, download the result.',
         ],
       },
     ],
