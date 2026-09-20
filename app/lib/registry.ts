@@ -49,6 +49,20 @@ export interface SourceProvider {
     experimental?: boolean
     /** Shown next to the experimental badge, explaining what is uncertain. */
     experimentalNote?: string
+    /**
+     * How to get an export out of this app, as numbered steps. Written per
+     * source: "Settings > Import / Export" is not a universal path, and
+     * sending someone down the wrong menu, or to the wrong one of two export
+     * formats, wastes their time on a file we cannot read.
+     */
+    exportSteps?: string[]
+    /** Prose shown above the steps, or instead of them when we cannot honestly
+     *  describe a menu path (an app we have never been able to run). */
+    exportNote?: string
+    /** `accept` for the file picker. Defaults to JSON. */
+    fileAccept?: string
+    /** What the drop zone says the file should be. */
+    fileHint?: string
 }
 
 export interface ModuleOption {
@@ -85,6 +99,21 @@ export const sources: SourceProvider[] = [
         icon: Ampersand,
         available: true,
         connectionType: 'file',
+        // Ampersand offers two export formats. The .ampar self-backup archive
+        // is an undocumented internal format and deliberately not supported:
+        // its author implemented the JSON export specifically as the stable
+        // interchange format, so JSON is the one to read. The steps are
+        // explicit about that, since picking .ampar just wastes the user's
+        // time on a file we reject.
+        exportSteps: [
+            'Open Ampersand.',
+            'Go to Settings.',
+            'Open Import & export.',
+            'Under Export, choose the JSON option, not the .ampar backup archive.',
+            'Save the file, then upload it below.',
+        ],
+        fileAccept: 'application/json,.json',
+        fileHint: 'JSON exported from Ampersand',
     },
     {
         id: 'berrytree',
@@ -100,6 +129,16 @@ export const sources: SourceProvider[] = [
             'August 2026, so we have only ever seen one export, with most sections empty. Members, ' +
             'custom fronts, fronting history and folders are converted. Anything else in your file is ' +
             'counted and reported rather than guessed at, so check the warnings when it finishes.',
+        // No menu path here on purpose: we have never been able to run
+        // BerryTree, so we would be inventing one. Better to describe the
+        // file than to send someone hunting for a screen we made up.
+        exportNote:
+            'BerryTree was removed from Google Play and its server has been unreachable since around ' +
+            'August 2026, so this works with an export you saved while it was still running. The file ' +
+            'is a single .json document, usually named something like ' +
+            'berrytree-export-<system>-<date>.json.',
+        fileAccept: 'application/json,.json',
+        fileHint: 'JSON exported from BerryTree',
     },
     {
         id: 'octocon',

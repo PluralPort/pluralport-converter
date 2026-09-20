@@ -111,31 +111,41 @@
               Your export is read and converted entirely in your browser. The file never leaves your device.
             </p>
 
-            <details class="group rounded-field border border-border bg-bg-2 open:border-accent/40">
+            <details
+              v-if="activeSource?.exportSteps || activeSource?.exportNote"
+              class="group rounded-field border border-border bg-bg-2 open:border-accent/40"
+            >
               <summary class="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold text-text">
                 <ChevronRight class="size-4 text-text-secondary transition-transform group-open:rotate-90" />
                 <span>How to export from {{ activeSource?.name }}</span>
               </summary>
-              <ol class="m-0 flex list-decimal flex-col gap-1.5 border-t border-border/60 px-3.5 py-3 pl-9 text-[13px] text-text-secondary marker:text-text-muted marker:tabular-nums">
-                <li>Open {{ activeSource?.name }}.</li>
-                <li>Go to <span class="text-text-heading">Settings</span>.</li>
-                <li>Open <span class="text-text-heading">Import / Export</span>.</li>
-                <li>Under Export, choose <span class="text-text-heading">Export your data to a JSON file</span>.</li>
-                <li>Save the file, then upload it below.</li>
-              </ol>
+              <div class="flex flex-col gap-2 border-t border-border/60 px-3.5 py-3 text-[13px] text-text-secondary">
+                <p v-if="activeSource?.exportNote" class="m-0">{{ activeSource.exportNote }}</p>
+                <ol
+                  v-if="activeSource?.exportSteps"
+                  class="m-0 flex list-decimal flex-col gap-1.5 pl-5.5 marker:text-text-muted marker:tabular-nums"
+                >
+                  <li v-for="(stepText, i) in activeSource.exportSteps" :key="i">{{ stepText }}</li>
+                </ol>
+              </div>
             </details>
 
             <label
               class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-field border border-dashed bg-bg-2 px-4 py-8 text-center transition hover:border-surface-4"
               :class="sourceFile ? 'border-accent/50 bg-accent/5' : 'border-border'"
             >
-              <input type="file" accept="application/json,.json" class="sr-only" @change="onFileChange" />
+              <input
+                type="file"
+                :accept="activeSource?.fileAccept ?? 'application/json,.json'"
+                class="sr-only"
+                @change="onFileChange"
+              />
               <Upload class="size-5" :class="sourceFile ? 'text-accent' : 'text-text-secondary'" />
               <span class="text-[13px] font-semibold text-text-heading">
                 {{ sourceFile ? sourceFile.name : 'Choose an export file' }}
               </span>
               <span class="text-xs text-text-muted">
-                {{ sourceFile ? fileSizeLabel : `JSON exported from ${activeSource?.name}` }}
+                {{ sourceFile ? fileSizeLabel : (activeSource?.fileHint ?? `Export file from ${activeSource?.name}`) }}
               </span>
             </label>
           </div>
