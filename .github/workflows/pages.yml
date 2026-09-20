@@ -32,6 +32,14 @@ jobs:
 
       - run: npm ci
 
+      # Deliberately before the build: a broken conversion should stop the
+      # deploy rather than ship over the top of a working one.
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
       # base_path is "" for a user/org site and "/<repo>" for a project site.
       # The trailing slash makes both cases a valid Nuxt baseURL.
       - name: Generate static site
