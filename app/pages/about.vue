@@ -115,6 +115,9 @@ import { computed, h } from 'vue'
 import { ArrowUpRight, ArrowRight, Check, Circle, Github } from 'lucide-vue-next'
 import { sources, destinations, converters, type SourceProvider, type DestinationFormat } from '~/lib/registry'
 
+// See index.vue: runtime asset paths need the base applied by hand.
+const assetUrl = useAssetUrl()
+
 useHead({ title: 'About - PluralPort Converter' })
 
 const ConversionPath = (props: { source: SourceProvider; dest: DestinationFormat; muted?: boolean }) => {
@@ -123,7 +126,7 @@ const ConversionPath = (props: { source: SourceProvider; dest: DestinationFormat
   return h('div', { class: 'flex min-w-0 flex-1 items-center gap-2' }, [
     h('span', { class: 'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded bg-bg-2' }, [
       props.source.logo
-        ? h('img', { src: props.source.logo, alt: `${props.source.name} logo`, class: 'size-full object-contain' })
+        ? h('img', { src: assetUrl(props.source.logo), alt: `${props.source.name} logo`, class: 'size-full object-contain' })
         : h(props.source.icon, { class: 'size-3.5 text-text-secondary' }),
     ]),
     h('span', { class: `truncate text-sm font-semibold ${labelTone}` }, props.source.name),

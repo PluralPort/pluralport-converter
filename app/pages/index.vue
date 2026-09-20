@@ -63,7 +63,7 @@
                 <span class="flex size-6 items-center justify-center overflow-hidden rounded bg-bg/60">
                   <img
                     v-if="src.logo"
-                    :src="src.logo"
+                    :src="assetUrl(src.logo)"
                     :alt="`${src.name} logo`"
                     class="size-full object-contain"
                     :class="{ 'opacity-60 grayscale': !src.available }"
@@ -437,6 +437,10 @@ import {
 } from 'lucide-vue-next'
 
 import { sources, destinations, findConverter } from '~/lib/registry'
+
+// Registry logo paths are runtime strings, so Vite cannot rewrite them with
+// the base path. Resolve them explicitly or they 404 on Project Pages.
+const assetUrl = useAssetUrl()
 import type { OPWarning, TaskState } from '~/lib/converters/types'
 useHead({
   title: 'PluralPort Converter - Turn a plural app export into a PluralPort file',
