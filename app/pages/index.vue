@@ -79,6 +79,10 @@
                   v-if="!src.available"
                   class="shrink-0 rounded bg-surface-2 px-1.5 py-px font-display text-[9px] tracking-wider uppercase text-text-muted"
                 >Soon</span>
+                <span
+                  v-else-if="src.experimental"
+                  class="shrink-0 rounded border border-warning/40 bg-warning/10 px-1.5 py-px font-display text-[9px] tracking-wider uppercase text-warning"
+                >Experimental</span>
               </span>
               <span class="text-[13px] font-semibold text-text-heading">{{ src.name }}</span>
               <span class="text-xs text-text-muted">{{ src.description }}</span>
@@ -88,6 +92,21 @@
 
         <template v-if="activeSource?.connectionType === 'file'">
           <div class="flex flex-col gap-3 border-t border-border pt-5">
+            <!-- Someone converting the only copy of their data deserves to
+                 know how well understood the format is, before they start. -->
+            <div
+              v-if="activeSource?.experimental"
+              class="flex gap-3 rounded-field border border-warning/30 bg-warning/5 px-4 py-3"
+            >
+              <TriangleAlert class="size-5 shrink-0 text-warning" />
+              <div class="flex flex-col gap-1">
+                <h3 class="m-0 text-sm font-semibold text-text-heading">
+                  {{ activeSource?.name }} support is experimental
+                </h3>
+                <p class="m-0 text-[13px] text-text-secondary">{{ activeSource?.experimentalNote }}</p>
+              </div>
+            </div>
+
             <p class="m-0 text-sm text-text-secondary">
               Your export is read and converted entirely in your browser. The file never leaves your device.
             </p>
@@ -418,7 +437,6 @@ import {
 } from 'lucide-vue-next'
 
 import { sources, destinations, findConverter } from '~/lib/registry'
-import { parseAmpersand, systemLabel, countAmpersand } from '~/lib/ampersand-client'
 import type { OPWarning, TaskState } from '~/lib/converters/types'
 useHead({
   title: 'PluralPort Converter - Turn a plural app export into a PluralPort file',
@@ -494,12 +512,16 @@ async function connectAndProceed() {
       throw new Error('That source has no importer yet.')
     }
     if (!sourceFile.value) throw new Error('Choose an export file first.')
+    const inspect = activeConverter.value?.inspect
+    if (!inspect) throw new Error('That source has no importer yet.')
+
     const text = await sourceFile.value.text()
-    const parsed = parseAmpersand(text) // throws a user-facing message on a bad file
+    // Throws a message written for the visitor when the file isn't readable.
+    const { label, counts } = inspect(text)
     fileText.value = text
-    systemName.value = systemLabel(parsed)
+    systemName.value = label
     step.value = 'configure'
-    applyLocalCounts(countAmpersand(parsed))
+    applyLocalCounts(counts)
   } catch (e) {
     authError.value = e instanceof Error ? e.message : 'Could not read that export file.'
   } finally {

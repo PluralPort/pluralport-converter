@@ -1,6 +1,8 @@
 import {
   coll,
+  countAmpersand,
   parseAmpersand,
+  systemLabel,
   type AmpAsset,
   type AmpBoardMessage,
   type AmpCustomField,
@@ -574,5 +576,9 @@ export const converter = defineConverter({
   sourceId: 'ampersand',
   destinationId: 'pluralport_v0.1',
   modules: ['members', 'custom_fronts', 'fronting', 'notes', 'tags', 'custom_fields', 'boards', 'polls', 'images'],
+  inspect: (fileText) => {
+    const data = parseAmpersand(fileText)
+    return { label: systemLabel(data), counts: countAmpersand(data) }
+  },
   run: runAmpersandToOp,
 })

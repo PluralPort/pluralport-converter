@@ -11,10 +11,12 @@ import {
     MessagesSquare,
     SlidersHorizontal,
     StickyNote,
+    TreeDeciduous,
     User,
     VenetianMask,
 } from 'lucide-vue-next'
 import {converter as ampersandToPluralPort} from './converters/ampersand-to-op'
+import {converter as berrytreeToPluralPort} from './converters/berrytree-to-pp'
 import type {Converter} from './converters/types'
 
 /**
@@ -37,6 +39,16 @@ export interface SourceProvider {
     icon: Component
     available: boolean
     connectionType: ConnectionType
+    /**
+     * The converter works, but our understanding of the format is thin:
+     * built without a reference implementation, real exports of varying
+     * vintage, or the ability to generate test data by exercising the app.
+     * The UI says so up front, because someone converting the only copy of
+     * their data deserves to know how well understood the format is.
+     */
+    experimental?: boolean
+    /** Shown next to the experimental badge, explaining what is uncertain. */
+    experimentalNote?: string
 }
 
 export interface ModuleOption {
@@ -73,6 +85,21 @@ export const sources: SourceProvider[] = [
         icon: Ampersand,
         available: true,
         connectionType: 'file',
+    },
+    {
+        id: 'berrytree',
+        name: 'BerryTree',
+        description: 'Convert an Export',
+        logo: '/logos/berrytree.png',
+        icon: TreeDeciduous,
+        available: true,
+        connectionType: 'file',
+        experimental: true,
+        experimentalNote:
+            'BerryTree was pulled from Google Play and its server has been unreachable since around ' +
+            'August 2026, so we have only ever seen one export, with most sections empty. Members, ' +
+            'custom fronts, fronting history and folders are converted. Anything else in your file is ' +
+            'counted and reported rather than guessed at, so check the warnings when it finishes.',
     },
     {
         id: 'octocon',
@@ -168,6 +195,7 @@ export const destinations: DestinationFormat[] = [
 
 export const converters: Converter[] = [
     ampersandToPluralPort,
+    berrytreeToPluralPort,
 ]
 
 export function findConverter(sourceId: string, destinationId: string): Converter | undefined {

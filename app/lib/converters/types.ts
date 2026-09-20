@@ -33,14 +33,13 @@ export interface RunResult {
 }
 
 /**
- * Everything a converter might need to reach its source. Token sources
- * (Simply Plural) use `token`/`userId`; file sources (Ampersand) use
- * `fileText`/`fileName`. A converter only reads the fields relevant to
- * its own `sourceId`.
+ * Everything a converter might need to reach its source. Every source is
+ * currently a file, so converters read `fileText`/`fileName`. `token` is
+ * reserved for a future source calling a CORS-enabled API directly from the
+ * page; see the note on ConnectionType in registry.ts.
  */
 export interface SourceInput {
     token?: string
-    userId?: string
     fileText?: string
     fileName?: string
 }
@@ -51,6 +50,16 @@ export type ConverterFn = (
     cb: RunCallbacks,
 ) => Promise<RunResult>
 
+/**
+ * What the connect step learns from a file before conversion runs: a name to
+ * show, and the per-module record counts the configure step displays.
+ * Throws a message meant for the visitor when the file is not readable.
+ */
+export type InspectFn = (fileText: string) => {
+    label: string
+    counts: Record<string, number>
+}
+
 export interface Converter {
     sourceId: string
     destinationId: string
@@ -60,6 +69,12 @@ export interface Converter {
      * the destination declares.
      */
     modules?: string[]
+    /**
+     * Validates and summarises an uploaded file. Lives on the converter
+     * because it is the thing that knows the format; the page just calls it
+     * for whichever source is selected.
+     */
+    inspect?: InspectFn
     run: ConverterFn
 }
 
