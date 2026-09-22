@@ -561,13 +561,29 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
         swapped += 1
       }
 
+      // A BerryTree entry names exactly one member or status, so the period
+      // carries a single assignment. Its fronting type is a tier within this
+      // period, which is what front_role is for, rather than free text.
+      const typeName = typeNames.get(nonEmpty(f.fronting_type_id) ?? '') ?? null
+      const viaStatus = !nonEmpty(f.member_id) && !!nonEmpty(f.custom_status_id)
+
       opFrontPeriods.push({
         id: newUUID(),
         system_id: systemId,
-        member_id: memberPp,
         started_at: started,
         ended_at: ended,
-        comment: frontComment(f, typeNames),
+        assignments: [{
+          member_id: memberPp,
+          front_role: frontRole(typeName, viaStatus),
+          note: nonEmpty(f.note),
+          source_refs: [sourceRef('front_entries', nonEmpty(f.id))],
+          // BerryTree's fronting types are user-editable, so an unmapped one
+          // keeps its original name rather than disappearing into "unknown".
+          extensions: typeName ? { berrytree: { fronting_type: typeName } } : {},
+        }],
+        status: nonEmpty(f.custom_status),
+        note: null,
+        source_kind: 'interval',
         source_refs: [sourceRef('front_entries', nonEmpty(f.id))],
         extensions: {},
       })
@@ -709,16 +725,28 @@ function systemExtensions(pronouns: string | null, emoji: string | null) {
   return Object.keys(bt).length ? { berrytree: bt } : {}
 }
 
-/** Front comment: the fronting type's name, BerryTree's own status text and
- *  any note, joined. v0.1 has no first-class fronting-type vocabulary, so
- *  the type name rides along here rather than being dropped. */
-function frontComment(f: BtFrontEntry, typeNames: Map<string, string>): string | null {
-  const parts = [
-    typeNames.get(nonEmpty(f.fronting_type_id) ?? ''),
-    nonEmpty(f.custom_status),
-    nonEmpty(f.note),
-  ].filter((p): p is string => !!p)
-  return parts.length ? parts.join(' - ') : null
+/**
+ * BerryTree's fronting-type vocabulary onto the spec's recommended
+ * `front_role` values. The default set ships as Fronting, Co-fronting,
+ * Co-conscious, Blurry and Influencing, but the vocabulary is user-editable,
+ * so anything unrecognised becomes "unknown" and keeps its original name in
+ * the assignment's extensions rather than being guessed into a neighbour.
+ */
+const FRONT_ROLES: Record<string, string> = {
+  'fronting': 'primary',
+  'co-fronting': 'co_front',
+  'cofronting': 'co_front',
+  'co-conscious': 'co_conscious',
+  'coconscious': 'co_conscious',
+  'influencing': 'influencing',
+}
+
+function frontRole(typeName: string | null, viaCustomStatus: boolean): string {
+  // A standalone fronting entity rather than a person: exactly what the
+  // spec's "custom_status" role is for.
+  if (viaCustomStatus) return 'custom_status'
+  if (!typeName) return 'member'
+  return FRONT_ROLES[typeName.trim().toLowerCase()] ?? 'unknown'
 }
 
 export const converter = defineConverter({

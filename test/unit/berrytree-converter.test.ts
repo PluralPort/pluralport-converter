@@ -216,10 +216,66 @@ describe('BerryTree converter: fronting', () => {
     expect(envelope.front_periods).toHaveLength(2)
   })
 
-  it('carries the fronting type name and note into the comment', async () => {
+  it('emits the spec FrontPeriod shape, not a flat member_id', async () => {
     const { envelope } = await run(sample())
-    const withNote = envelope.front_periods.find((f: { comment: string | null }) => f.comment)
-    expect(withNote.comment).toBe('Co-conscious - at the dentist')
+    const period = envelope.front_periods[0]
+    expect(period).not.toHaveProperty('member_id')
+    expect(period).not.toHaveProperty('comment')
+    expect(period.source_kind).toBe('interval')
+    expect(period.assignments).toHaveLength(1)
+    expect(period.assignments[0]).toMatchObject({ front_role: expect.any(String) })
+    expect(period.assignments[0].member_id).toEqual(expect.any(String))
+  })
+
+  it('maps the fronting type to a front_role and keeps the note per assignment', async () => {
+    const { envelope } = await run(sample())
+    const period = envelope.front_periods.find(
+      (f: { assignments: { note: string | null }[] }) => f.assignments[0].note,
+    )
+    expect(period.assignments[0].front_role).toBe('co_conscious')
+    expect(period.assignments[0].note).toBe('at the dentist')
+    expect(period.assignments[0].extensions.berrytree.fronting_type).toBe('Co-conscious')
+  })
+
+  it.each([
+    ['Fronting', 'primary'],
+    ['Co-fronting', 'co_front'],
+    ['Co-conscious', 'co_conscious'],
+    ['Influencing', 'influencing'],
+    // The vocabulary is user-editable, so anything unrecognised must not be
+    // guessed into a neighbouring tier.
+    ['Blurry', 'unknown'],
+    ['Something A User Invented', 'unknown'],
+  ])('maps fronting type %s to front_role %s', async (typeName, role) => {
+    const { envelope } = await run(sample({
+      custom_statuses: [{ id: 'ty-1', kind: 'type', name: typeName }],
+      front_entries: [{ id: 'fe', member_id: 'm-1', fronting_type_id: 'ty-1', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].assignments[0].front_role).toBe(role)
+    expect(envelope.front_periods[0].assignments[0].extensions.berrytree.fronting_type).toBe(typeName)
+  })
+
+  it('uses the custom_status role for a standalone fronting entity', async () => {
+    const { envelope } = await run(sample())
+    const viaStatus = envelope.front_periods.find(
+      (f: { assignments: { front_role: string }[] }) => f.assignments[0].front_role === 'custom_status',
+    )
+    expect(viaStatus).toBeDefined()
+  })
+
+  it('defaults to the member role when no fronting type is named', async () => {
+    const { envelope } = await run(sample({
+      custom_statuses: [],
+      front_entries: [{ id: 'fe', member_id: 'm-1', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].assignments[0].front_role).toBe('member')
+  })
+
+  it('carries BerryTree status text as the period status', async () => {
+    const { envelope } = await run(sample({
+      front_entries: [{ id: 'fe', member_id: 'm-1', custom_status: 'at work', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].status).toBe('at work')
   })
 
   it.each([
