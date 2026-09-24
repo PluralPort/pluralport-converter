@@ -2,6 +2,7 @@ import type {Component} from 'vue'
 import {
     Ampersand,
     BarChart3,
+    Bot,
     Boxes,
     Clock,
     FolderTree,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-vue-next'
 import {converter as ampersandToPluralPort} from './converters/ampersand-to-op'
 import {converter as berrytreeToPluralPort} from './converters/berrytree-to-pp'
+import {octoconConverter, pluralkitConverter} from './converters/pluralkit-to-pp'
 import type {Converter} from './converters/types'
 
 /**
@@ -141,13 +143,44 @@ export const sources: SourceProvider[] = [
         fileHint: 'JSON exported from BerryTree',
     },
     {
+        id: 'pluralkit',
+        name: 'PluralKit',
+        description: 'Convert an Export',
+        // No logo asset for PluralKit yet; the card falls back to the icon.
+        // Pointing at a file that is not there is how the source logos
+        // broke on the deployed site in the first place.
+        icon: Bot,
+        available: true,
+        connectionType: 'file',
+        exportSteps: [
+            'In any Discord channel or DM with PluralKit, send "pk;export".',
+            'PluralKit replies in DM with a link to your export file.',
+            'Open the link and save the .json file.',
+            'Upload it below.',
+        ],
+        fileAccept: 'application/json,.json',
+        fileHint: 'JSON exported from PluralKit',
+    },
+    {
         id: 'octocon',
         name: 'Octocon',
         description: 'Convert an Export',
         logo: '/logos/octocon.png',
         icon: Layers,
-        available: false,
+        available: true,
         connectionType: 'file',
+        // Octocon and its forks emit a PluralKit-shaped export, so they are
+        // read by the same converter. Listed as its own source anyway:
+        // someone looking for a way out of Octocon searches for Octocon,
+        // not for the format its export happens to use.
+        // No menu path: we have not run Octocon, so any steps would be
+        // invented. Describe the file instead.
+        exportNote:
+            'Octocon exports in PluralKit\'s format, so this reads the same file. Export your data ' +
+            'from Octocon and upload the .json it gives you. Octocon forks that kept the export ' +
+            'format work here too.',
+        fileAccept: 'application/json,.json',
+        fileHint: 'JSON exported from Octocon',
     },
     {
         id: 'pluralspace',
@@ -235,6 +268,8 @@ export const destinations: DestinationFormat[] = [
 export const converters: Converter[] = [
     ampersandToPluralPort,
     berrytreeToPluralPort,
+    pluralkitConverter,
+    octoconConverter,
 ]
 
 export function findConverter(sourceId: string, destinationId: string): Converter | undefined {
