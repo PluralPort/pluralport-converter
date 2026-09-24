@@ -128,9 +128,11 @@ export const sources: SourceProvider[] = [
         experimental: true,
         experimentalNote:
             'BerryTree was pulled from Google Play and its server has been unreachable since around ' +
-            'August 2026, so we have only ever seen one export, with most sections empty. Members, ' +
-            'custom fronts, fronting history and folders are converted. Anything else in your file is ' +
-            'counted and reported rather than guessed at, so check the warnings when it finishes.',
+            'August 2026. We have only ever seen one export, with most of its sections empty, so this ' +
+            'is built from that plus a reading of the last public Android app, which settled how ' +
+            'several fields are actually written. Members, custom fronts, fronting history, folders, ' +
+            'tags, custom fields and images are converted. Anything else in your file is counted and ' +
+            'reported rather than guessed at, so check the warnings when it finishes.',
         // No menu path here on purpose: we have never been able to run
         // BerryTree, so we would be inventing one. Better to describe the
         // file than to send someone hunting for a screen we made up.

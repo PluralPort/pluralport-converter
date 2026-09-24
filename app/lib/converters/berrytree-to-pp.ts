@@ -457,8 +457,8 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
           id: newUUID(),
           group_id: groupPp,
           member_id: memberPp,
+          sort_order: null,
           source_refs: [sourceRef('members', nonEmpty(m.id))],
-          extensions: {},
         })
       }
     }
