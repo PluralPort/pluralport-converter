@@ -11,10 +11,10 @@ function sample(overrides: Record<string, unknown> = {}) {
     app: 'berrytree',
     schema_version: 3,
     exported_at: '2026-09-16T16:18:28Z',
-    system: { username: 'account-name', system_name: 'Thin System' },
+    system: { username: 'account-name', system_name: 'Test System' },
     system_contexts: [
       {
-        id: 'ctx-main', kind: 'main', name: 'Test System', description: 'A system',
+        id: 'ctx-main', kind: 'main', name: 'Signup Default', description: 'A system',
         color: '#818CF8', tag: 'TS', pronouns: 'they/them', emoji: '*',
         is_private: false, custom_fields: [],
       },
@@ -54,7 +54,7 @@ function sample(overrides: Record<string, unknown> = {}) {
   }
 }
 
-const ALL_MODULES = ['members', 'custom_fronts', 'groups', 'tags', 'custom_fields', 'fronting']
+const ALL_MODULES = ['members', 'custom_fronts', 'groups', 'tags', 'custom_fields', 'fronting', 'images']
 
 async function run(data: unknown, options: Partial<RunOptions> = {}) {
   const warnings: OPWarning[] = []
@@ -102,14 +102,64 @@ describe('BerryTree converter: envelope', () => {
 })
 
 describe('BerryTree converter: system profile', () => {
-  it('reads the profile from the main context, not the thin system object', async () => {
+  it('reads the profile from the main context when account settings are empty', async () => {
     const { envelope } = await run(sample())
     const sys = envelope.systems[0]
-    expect(sys.name).toBe('Test System')
     expect(sys.description).toBe('A system')
     expect(sys.tag).toBe('TS')
     expect(sys.color).toBe('#818cf8')
     expect(sys.extensions.berrytree).toEqual({ pronouns: 'they/them', emoji: '*' })
+  })
+
+  it('prefers the account settings the app edits over the main context', async () => {
+    // The 1.0.16 client writes the profile to user settings and never
+    // touches system_contexts, so an edit made in the app lives there.
+    const { envelope } = await run(sample({
+      user_settings: {
+        system_description: 'edited in the app',
+        system_avatar: 'https://pub-abc123.r2.dev/sys.png',
+        system_banner: 'https://pub-abc123.r2.dev/banner.png',
+      },
+    }))
+    const sys = envelope.systems[0]
+    expect(sys.description).toBe('edited in the app')
+    const byId = new Map(envelope.assets.map((a: { id: string; uri: string }) => [a.id, a.uri]))
+    expect(byId.get(sys.avatar_asset_id)).toBe('https://pub-abc123.r2.dev/sys.png')
+    expect(byId.get(sys.banner_asset_id)).toBe('https://pub-abc123.r2.dev/banner.png')
+
+    const blank = await run(sample({ user_settings: { system_description: '  ' } }))
+    expect(blank.envelope.systems[0].description).toBe('A system')
+  })
+
+  it('takes the name the app edits, then the context name, then the username', async () => {
+    expect((await run(sample())).envelope.systems[0].name).toBe('Test System')
+    const noAccountName = await run(sample({ system: { username: 'account-name', system_name: '' } }))
+    expect(noAccountName.envelope.systems[0].name).toBe('Signup Default')
+  })
+
+  it('preserves the profile tags and status line without quoting them in warnings', async () => {
+    // Taxonomy assignments cannot target a system, and System has no status
+    // field, so these ride in the namespace alongside pronouns and emoji.
+    const { envelope, warnings } = await run(sample({
+      user_settings: { system_tags: ['secret tag', 'Secret Tag', ''], system_status: 'secret status' },
+    }))
+    expect(envelope.systems[0].extensions.berrytree).toMatchObject({
+      tags: ['secret tag'],
+      status: 'secret status',
+    })
+    expect(JSON.stringify(warnings)).not.toContain('secret')
+  })
+
+  it('maps system-level custom fields with the system as their subject', async () => {
+    const { envelope } = await run(sample({
+      user_settings: { system_custom_fields: [{ label: 'Founded', value: '2019' }, { label: '', value: 'x' }] },
+    }))
+    const value = envelope.custom_field_values.find(
+      (v: { subject_type?: string }) => v.subject_type === 'system',
+    )
+    expect(value).toMatchObject({ subject_id: envelope.systems[0].id, value: '2019' })
+    const field = envelope.custom_fields.find((f: { id: string }) => f.id === value.field_id)
+    expect(field.name).toBe('Founded')
   })
 
   it('honours the context privacy flag rather than assuming private', async () => {
@@ -194,12 +244,29 @@ describe('BerryTree converter: folders, tags and fields', () => {
     const { envelope } = await run(sample())
     expect(envelope.taxonomy_terms.map((t: { name: string }) => t.name)).toEqual(['alpha-tag'])
     expect(envelope.taxonomy_assignments).toHaveLength(1)
+    // Spec field names, matching the Ampersand converter.
+    const alpha = envelope.members.find((m: { name: string }) => m.name === 'Alpha')
+    expect(envelope.taxonomy_assignments[0]).toMatchObject({ subject_type: 'member', subject_id: alpha.id })
+    expect(envelope.taxonomy_assignments[0]).not.toHaveProperty('record_type')
   })
 
   it('gives role and mood a home as custom fields', async () => {
     const { envelope } = await run(sample())
     const fields = envelope.custom_fields.map((f: { name: string }) => f.name).sort()
     expect(fields).toEqual(['Favourite', 'Mood', 'Role'])
+  })
+
+  it('writes custom fields in the spec shape', async () => {
+    const { envelope } = await run(sample())
+    for (const field of envelope.custom_fields) {
+      expect(field.field_type).toBe('text')
+      expect(field).not.toHaveProperty('type')
+    }
+    const alpha = envelope.members.find((m: { name: string }) => m.name === 'Alpha')
+    for (const value of envelope.custom_field_values) {
+      expect(value).toMatchObject({ subject_type: 'member', subject_id: alpha.id })
+      expect(value).not.toHaveProperty('member_id')
+    }
   })
 
   it('counts unreadable custom field entries instead of guessing', async () => {
@@ -216,10 +283,98 @@ describe('BerryTree converter: fronting', () => {
     expect(envelope.front_periods).toHaveLength(2)
   })
 
-  it('carries the fronting type name and note into the comment', async () => {
+  it('emits the spec FrontPeriod shape, not a flat member_id', async () => {
     const { envelope } = await run(sample())
-    const withNote = envelope.front_periods.find((f: { comment: string | null }) => f.comment)
-    expect(withNote.comment).toBe('Co-conscious - at the dentist')
+    const period = envelope.front_periods[0]
+    expect(period).not.toHaveProperty('member_id')
+    expect(period).not.toHaveProperty('comment')
+    expect(period.source_kind).toBe('interval')
+    expect(period.assignments).toHaveLength(1)
+    expect(period.assignments[0]).toMatchObject({ front_role: expect.any(String) })
+    expect(period.assignments[0].member_id).toEqual(expect.any(String))
+  })
+
+  it('maps the fronting type to a front_role and keeps the note per assignment', async () => {
+    const { envelope } = await run(sample())
+    const period = envelope.front_periods.find(
+      (f: { assignments: { note: string | null }[] }) => f.assignments[0].note,
+    )
+    expect(period.assignments[0].front_role).toBe('co_conscious')
+    expect(period.assignments[0].note).toBe('at the dentist')
+    expect(period.assignments[0].extensions.berrytree.fronting_type).toBe('Co-conscious')
+  })
+
+  it.each([
+    ['Fronting', 'primary'],
+    ['Co-fronting', 'co_front'],
+    ['Co-conscious', 'co_conscious'],
+    ['Influencing', 'influencing'],
+    // The vocabulary is user-editable, so anything unrecognised must not be
+    // guessed into a neighbouring tier.
+    ['Blurry', 'unknown'],
+    ['Something A User Invented', 'unknown'],
+  ])('maps fronting type %s to front_role %s', async (typeName, role) => {
+    const { envelope } = await run(sample({
+      custom_statuses: [{ id: 'ty-1', kind: 'type', name: typeName }],
+      front_entries: [{ id: 'fe', member_id: 'm-1', fronting_type_id: 'ty-1', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].assignments[0].front_role).toBe(role)
+    expect(envelope.front_periods[0].assignments[0].extensions.berrytree.fronting_type).toBe(typeName)
+  })
+
+  it('keeps a legacy fronting type given as custom_status_id', async () => {
+    // Older BerryTree versions had no fronting_type_id: a typed front was
+    // the member plus a custom_status_id naming a kind "type" row. The type
+    // must map exactly as the current shape does, and must not be taken for
+    // who was fronting.
+    const { envelope, warnings } = await run(sample({
+      front_entries: [{ id: 'fe', member_id: 'm-1', custom_status_id: 'ty-1', note: 'legacy',
+        started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods).toHaveLength(1)
+    const assignment = envelope.front_periods[0].assignments[0]
+    const alpha = envelope.members.find((m: { name: string }) => m.name === 'Alpha')
+    expect(assignment.member_id).toBe(alpha.id)
+    expect(assignment.front_role).toBe('co_conscious')
+    expect(assignment.extensions.berrytree.fronting_type).toBe('Co-conscious')
+    expect(codes(warnings)).not.toContain('bt_front_unresolved_ref')
+  })
+
+  it('reports a type-only legacy entry for what it is', async () => {
+    // The legacy shape can also carry a type with no member at all. There is
+    // nobody to attach it to, and the report must say so rather than blame a
+    // member missing from the export.
+    const { envelope, warnings } = await run(sample({
+      front_entries: [{ id: 'fe', member_id: null, custom_status_id: 'ty-1',
+        started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods).toHaveLength(0)
+    expect(codes(warnings)).toContain('bt_front_type_only')
+    expect(codes(warnings)).not.toContain('bt_front_unresolved_ref')
+    expect(codes(warnings)).not.toContain('bt_front_no_ref')
+  })
+
+  it('uses the custom_status role for a standalone fronting entity', async () => {
+    const { envelope } = await run(sample())
+    const viaStatus = envelope.front_periods.find(
+      (f: { assignments: { front_role: string }[] }) => f.assignments[0].front_role === 'custom_status',
+    )
+    expect(viaStatus).toBeDefined()
+  })
+
+  it('defaults to the member role when no fronting type is named', async () => {
+    const { envelope } = await run(sample({
+      custom_statuses: [],
+      front_entries: [{ id: 'fe', member_id: 'm-1', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].assignments[0].front_role).toBe('member')
+  })
+
+  it('carries BerryTree status text as the period status', async () => {
+    const { envelope } = await run(sample({
+      front_entries: [{ id: 'fe', member_id: 'm-1', custom_status: 'at work', started_at: '2026-09-16T16:18:11Z' }],
+    }))
+    expect(envelope.front_periods[0].status).toBe('at work')
   })
 
   it.each([
@@ -299,6 +454,53 @@ describe('BerryTree converter: assets', () => {
     expect(codes(warnings)).toContain('asset_uri_only')
   })
 
+  it('embeds a data URI image as a self-contained asset', async () => {
+    // BerryTree's editor stores images inline, so these carry the picture
+    // itself and survive the server being gone.
+    const uri = 'data:image/png;base64,iVBORw0KGgo='
+    const data = sample()
+    ;(data.members[0] as Record<string, unknown>).avatar = uri
+    const { envelope, warnings } = await run(data)
+    expect(envelope.assets).toHaveLength(1)
+    expect(envelope.assets[0]).toMatchObject({ data_uri: uri, uri: null, mime_type: 'image/png' })
+    const alpha = envelope.members.find((m: { name: string }) => m.name === 'Alpha')
+    expect(alpha.avatar_asset_id).toBe(envelope.assets[0].id)
+    expect(codes(warnings)).not.toContain('asset_uri_only')
+    expect(envelope.capabilities.modules).toContain('assets')
+  })
+
+  it('drops an unreadable data URI and counts it', async () => {
+    const data = sample()
+    ;(data.members[0] as Record<string, unknown>).banner = 'data:image/png;base64,!!!not base64!!!'
+    const { envelope, warnings } = await run(data)
+    expect(envelope.assets).toHaveLength(0)
+    expect(warnings.find(w => w.code === 'bt_avatar_unresolvable')?.count).toBe(1)
+  })
+
+  it('leaves embedded images out when Images is not selected, and says so', async () => {
+    const data = sample({ user_settings: { system_avatar: 'data:image/png;base64,iVBORw0KGgo=' } })
+    ;(data.members[0] as Record<string, unknown>).avatar = 'data:image/png;base64,iVBORw0KGgo='
+    ;(data.members[0] as Record<string, unknown>).banner = 'https://pub-abc123.r2.dev/b.png'
+    const { envelope, warnings } = await run(data, {
+      selectedModules: ALL_MODULES.filter(m => m !== 'images'),
+    })
+    // Linked images are only a URL either way, so they stay.
+    expect(envelope.assets).toHaveLength(1)
+    expect(envelope.assets[0]).toMatchObject({ uri: 'https://pub-abc123.r2.dev/b.png' })
+    expect(envelope.systems[0].avatar_asset_id).toBeNull()
+    expect(warnings.find(w => w.code === 'bt_images_not_selected')?.count).toBe(2)
+    expect(codes(warnings)).not.toContain('bt_avatar_unresolvable')
+  })
+
+  it('keeps a bucket URL as a link and never downloads it', async () => {
+    const url = 'https://pub-abc123.r2.dev/avatars/a.png'
+    const data = sample()
+    ;(data.members[0] as Record<string, unknown>).avatar = url
+    const { envelope, warnings } = await run(data)
+    expect(envelope.assets[0]).toMatchObject({ uri: url, data_uri: null })
+    expect(codes(warnings)).toContain('asset_uri_only')
+  })
+
   it('drops a non-URL avatar reference rather than writing a dangling pointer', async () => {
     const data = sample()
     ;(data.members[0] as Record<string, unknown>).avatar = 'storage/local/key'
@@ -328,7 +530,15 @@ describe('BerryTree converter: registration', () => {
   it('inspects a file for a label and per-module counts', () => {
     const { label, counts } = converter.inspect!(JSON.stringify(sample()))
     expect(label).toBe('Test System')
-    expect(counts).toMatchObject({ members: 1, custom_fronts: 2, fronting: 2, groups: 2 })
+    expect(counts).toMatchObject({ members: 1, custom_fronts: 2, fronting: 2, groups: 2, images: 0 })
+  })
+
+  it('counts embedded images for the images module, not linked ones', () => {
+    const data = sample({ user_settings: { system_avatar: 'data:image/png;base64,iVBORw0KGgo=' } })
+    ;(data.members[0] as Record<string, unknown>).banner = 'data:image/png;base64,iVBORw0KGgo='
+    ;(data.members[1] as Record<string, unknown>).avatar = 'https://pub-abc123.r2.dev/a.png'
+    const { counts } = converter.inspect!(JSON.stringify(data))
+    expect(counts.images).toBe(2)
   })
 
   it('rejects a file that is not a BerryTree export', () => {

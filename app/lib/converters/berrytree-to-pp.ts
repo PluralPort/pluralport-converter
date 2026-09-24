@@ -24,11 +24,15 @@ import {
   nonEmpty,
   parseBerrytree,
   countBerrytree,
+  isEmbeddedImage,
+  profileValue,
   systemLabel,
+  systemName,
   sectionLen,
   splitCustomStatuses,
   templateCount,
   unsupportedSections,
+  userSettings,
   FIELD_NAME_KEYS,
   FIELD_VALUE_KEYS,
   type BtCustomStatus,
@@ -63,44 +67,76 @@ function btPrivacy(isPrivate: unknown): { visibility: string; source: unknown } 
   return { visibility: isPrivate === false ? 'public' : 'private', source: {} }
 }
 
+// A base64 `data:` URI, as BerryTree's editor stores images. Same shape the
+// Sheaf importer accepts: any mime, optional parameters, base64 payload.
+const DATA_URI_RE = /^data:([\w/+.-]*?)((?:;[\w-]+=[\w-]+)*);base64,(.*)$/s
+const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/
+
+/** The mime type of a well-formed base64 data URI (null when it declares
+ *  something other than an image), or undefined when it is not one we can
+ *  read: bad prefix, empty or non-base64 payload. */
+function dataUriMime(value: string): string | null | undefined {
+  const m = DATA_URI_RE.exec(value)
+  if (!m) return undefined
+  const payload = m[3] ?? ''
+  if (!payload || payload.length % 4 !== 0 || !BASE64_RE.test(payload)) return undefined
+  const mime = (m[1] ?? '').toLowerCase()
+  return mime.startsWith('image/') ? mime : null
+}
+
 /**
- * Collects avatar/banner references as PluralPort Assets.
+ * Collects avatar/banner/status image references as PluralPort Assets.
  *
- * BerryTree's server has been down throughout this converter's development,
- * so we have never seen a populated avatar on a real export; the sample
- * carries "" with `has_avatar: false`. Whatever shape a populated one takes,
- * we can only record it as an external `uri`, never inline bytes, because
- * the host is gone. The spec requires an asset carrying only `uri` to emit
- * `asset_uri_only` so importers know it is not self-contained.
+ * BerryTree image fields hold one of three things. A base64 `data:` URI is
+ * what the app's editor submits, and carries the picture itself, so it
+ * becomes a self-contained asset with `data_uri` set. A URL on BerryTree's
+ * public image bucket, or any other external URL, can only be recorded as a
+ * `uri`, because the bytes are not in the file; the spec requires such an
+ * asset to emit `asset_uri_only` so importers know it is not self-contained.
+ * This converter never downloads anything. Anything else (a server-relative
+ * `/api/media/` path, a bare storage key) would be a dangling pointer, so it
+ * is dropped and counted by the caller.
  */
 class AssetTable {
-  private byUri = new Map<string, string>()
+  private byValue = new Map<string, string>()
   readonly assets: object[] = []
   uriOnly = 0
+  embedded = 0
+
+  /** `embedImages` false leaves data URIs out, for when the visitor has not
+   *  selected the images module. */
+  constructor(private readonly embedImages: boolean) {}
 
   ref(raw: unknown, kind: string): string | null {
     const value = nonEmpty(raw)
     if (!value) return null
-    // Only an absolute http(s) URL is a usable reference. A bare storage key
-    // or app-relative path would be a dangling pointer, so it is dropped and
-    // counted rather than written out as something that cannot resolve.
-    if (!/^https?:\/\//i.test(value)) return null
 
-    const existing = this.byUri.get(value)
+    const existing = this.byValue.get(value)
     if (existing) return existing
+
+    let asset: { mime_type: string | null; uri: string | null; data_uri: string | null }
+    if (/^data:/i.test(value)) {
+      if (!this.embedImages) return null
+      const mime = dataUriMime(value)
+      if (mime === undefined) return null
+      asset = { mime_type: mime, uri: null, data_uri: value }
+      this.embedded += 1
+    } else if (/^https?:\/\//i.test(value)) {
+      asset = { mime_type: null, uri: value, data_uri: null }
+      this.uriOnly += 1
+    } else {
+      return null
+    }
 
     const id = newUUID()
     this.assets.push({
       id,
       kind,
-      mime_type: null,
-      uri: value,
-      data_uri: null,
+      ...asset,
       source_refs: [sourceRef('assets')],
       extensions: {},
     })
-    this.byUri.set(value, id)
-    this.uriOnly += 1
+    this.byValue.set(value, id)
     return id
   }
 }
@@ -118,6 +154,7 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
   if (has('tags'))          wantedTasks.push({ key: 'tags',          label: 'Tags',          status: 'pending' })
   if (has('custom_fields')) wantedTasks.push({ key: 'custom_fields', label: 'Custom Fields', status: 'pending' })
   if (has('fronting'))      wantedTasks.push({ key: 'fronting',      label: 'Front History', status: 'pending' })
+  if (has('images'))        wantedTasks.push({ key: 'images',        label: 'Images',        status: 'pending' })
   wantedTasks.push({ key: 'build', label: 'Building PluralPort file', status: 'pending' })
   cb.initTasks(wantedTasks)
 
@@ -133,7 +170,24 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
     throw new Error(msg)
   }
 
-  const assets = new AssetTable()
+  // Embedded images follow the images module, as in the Ampersand
+  // converter. Linked images are only a URL either way, so they are kept
+  // whatever the setting.
+  const assets = new AssetTable(has('images'))
+  if (has('images')) cb.updateTask('images', { status: 'running' })
+  // Image values present in the file that could not become an asset. An
+  // embedded image left out because images were not selected is counted
+  // separately, so the report can say why.
+  let imagesDropped = 0
+  let imagesNotSelected = 0
+  const image = (raw: unknown, kind: string): string | null => {
+    const id = assets.ref(raw, kind)
+    if (!id && nonEmpty(raw)) {
+      if (!has('images') && isEmbeddedImage(raw)) imagesNotSelected += 1
+      else imagesDropped += 1
+    }
+    return id
+  }
 
   // --- Provenance checks before any mapping ------------------------------
   const schemaVersion = data.schema_version
@@ -174,18 +228,20 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
 
   // --- System profile ----------------------------------------------------
   cb.updateTask('system', { status: 'running' })
+  // The fields the app edits come from account settings first, then the
+  // main context: see `profileValue`.
   const ctx = mainContext(data)
+  const settings = userSettings(data)
   const systemId = newUUID()
-  const systemPronouns = nonEmpty(ctx.pronouns)
   const opSystem = {
     id: systemId,
-    name: nonEmpty(ctx.name) || nonEmpty(data.system?.system_name) || nonEmpty(data.system?.username) || 'System',
+    name: systemName(data) ?? 'System',
     display_name: null,
-    description: nonEmpty(ctx.description),
+    description: profileValue(data, 'system_description', 'description'),
     tag: nonEmpty(ctx.tag),
     color: btColor(ctx.color),
-    avatar_asset_id: assets.ref(ctx.avatar, 'avatar'),
-    banner_asset_id: assets.ref(ctx.banner, 'banner'),
+    avatar_asset_id: image(profileValue(data, 'system_avatar', 'avatar'), 'avatar'),
+    banner_asset_id: image(profileValue(data, 'system_banner', 'banner'), 'banner'),
     parent_system_id: null,
     archived: false,
     // Read from the context, the same way members read theirs. Hardcoding
@@ -193,11 +249,16 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
     privacy: btPrivacy(ctx.is_private),
     settings: {},
     source_refs: [sourceRef('system_contexts', nonEmpty(ctx.id))],
-    // v0.1 has no pronouns or emoji field on System, so they are preserved
-    // rather than dropped. The account email on the top-level `system`
-    // object is deliberately not carried: it is a login credential, not
-    // system data.
-    extensions: systemExtensions(systemPronouns, nonEmpty(ctx.emoji)),
+    // v0.1 has no pronouns, emoji, tags or status line on System (taxonomy
+    // assignments cannot target a system), so they are preserved rather
+    // than dropped. The account email on the top-level `system` object is
+    // deliberately not carried: it is a login credential, not system data.
+    extensions: systemExtensions({
+      pronouns: nonEmpty(ctx.pronouns),
+      emoji: nonEmpty(ctx.emoji),
+      tags: stringList(settings.system_tags),
+      status: nonEmpty(settings.system_status),
+    }),
   }
 
   // BerryTree hangs custom fields off contexts and layers as well as
@@ -236,15 +297,12 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
   const idMap = new Map<string, string>()   // BerryTree id -> PluralPort id
   const opMembers: object[] = []
   let templatesHeld = 0
-  let avatarsDropped = 0
 
   const mapMember = (m: BtMember, isCustomFront: boolean) => {
     const btId = nonEmpty(m.id)
     const ppId = newUUID()
     if (btId) idMap.set(btId, ppId)
 
-    const avatarId = assets.ref(m.avatar, 'avatar')
-    if (nonEmpty(m.avatar) && !avatarId) avatarsDropped += 1
 
     return {
       id: ppId,
@@ -256,8 +314,8 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
       age: null,
       birthday: null,
       color: btColor(m.color),
-      avatar_asset_id: avatarId,
-      banner_asset_id: assets.ref(m.banner, 'banner'),
+      avatar_asset_id: image(m.avatar, 'avatar'),
+      banner_asset_id: image(m.banner, 'banner'),
       proxy_tags: [],
       is_custom_front: isCustomFront,
       archived: m.archived === true,
@@ -318,7 +376,7 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
           age: null,
           birthday: null,
           color: btColor(s.color),
-          avatar_asset_id: assets.ref(s.avatar ?? s.image_url, 'avatar'),
+          avatar_asset_id: image(s.avatar ?? s.image_url, 'avatar'),
           banner_asset_id: null,
           proxy_tags: [],
           is_custom_front: true,
@@ -437,8 +495,8 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
         opTaxonomyAssignments.push({
           id: newUUID(),
           term_id: termId,
-          record_type: 'member',
-          record_id: memberPp,
+          subject_type: 'member',
+          subject_id: memberPp,
           source_refs: [sourceRef('members', nonEmpty(m.id))],
           extensions: {},
         })
@@ -463,7 +521,7 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
           id,
           system_id: systemId,
           name,
-          type: 'text',
+          field_type: 'text',
           description: null,
           sort_order: null,
           source_refs: [sourceRef('field_templates')],
@@ -474,6 +532,31 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
     }
 
     let unreadableFields = 0
+
+    // System-level fields, which the app keeps in account settings as
+    // `{label, value}` rows. The spec's custom field values can name the
+    // system itself as their subject, so these have a home.
+    const systemFields = userSettings(data).system_custom_fields
+    if (Array.isArray(systemFields)) {
+      for (const raw of systemFields) {
+        if (!raw || typeof raw !== 'object') { unreadableFields += 1; continue }
+        const row = raw as Record<string, unknown>
+        let name: string | null = null
+        for (const k of FIELD_NAME_KEYS) { name = nonEmpty(row[k]); if (name) break }
+        let value: string | null = null
+        for (const k of FIELD_VALUE_KEYS) { value = nonEmpty(row[k]); if (value) break }
+        if (!name || !value) { unreadableFields += 1; continue }
+        opCustomFieldValues.push({
+          id: newUUID(),
+          field_id: defineField(name),
+          subject_type: 'system',
+          subject_id: systemId,
+          value,
+          source_refs: [sourceRef('user_settings')],
+          extensions: {},
+        })
+      }
+    }
 
     for (const m of allMembers) {
       if (isTemplate(m)) continue
@@ -487,7 +570,8 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
         opCustomFieldValues.push({
           id: newUUID(),
           field_id: defineField(label),
-          member_id: memberPp,
+          subject_type: 'member',
+          subject_id: memberPp,
           value,
           source_refs: [sourceRef('members', nonEmpty(m.id))],
           extensions: {},
@@ -509,7 +593,8 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
         opCustomFieldValues.push({
           id: newUUID(),
           field_id: defineField(name),
-          member_id: memberPp,
+          subject_type: 'member',
+          subject_id: memberPp,
           value,
           source_refs: [sourceRef('members', nonEmpty(m.id))],
           extensions: {},
@@ -537,6 +622,7 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
   if (has('fronting')) {
     cb.updateTask('fronting', { status: 'running' })
     let missingRef = 0
+    let typeOnly = 0
     let unresolved = 0
     let badTimestamp = 0
     let swapped = 0
@@ -545,8 +631,20 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
       // An entry names EITHER a member or a custom status. Both id fields
       // are looked up in the one map so a status mis-filed by `kind` still
       // resolves.
-      const ref = nonEmpty(f.member_id) || nonEmpty(f.custom_status_id)
-      if (!ref) { missingRef += 1; continue }
+      //
+      // Older BerryTree versions had no `fronting_type_id`: a typed front was
+      // recorded as `custom_status_id` pointing at a `kind: "type"` row,
+      // usually alongside the `member_id`. That id names the type, not who
+      // was fronting, so it is read as the type and never as the subject.
+      const memberRef = nonEmpty(f.member_id)
+      const statusRef = nonEmpty(f.custom_status_id)
+      const legacyType = statusRef ? typeNames.get(statusRef) ?? null : null
+      const ref = memberRef ?? (legacyType === null ? statusRef : null)
+      if (!ref) {
+        if (legacyType !== null) typeOnly += 1
+        else missingRef += 1
+        continue
+      }
       const memberPp = idMap.get(ref)
       if (!memberPp) { unresolved += 1; continue }
 
@@ -561,13 +659,29 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
         swapped += 1
       }
 
+      // A BerryTree entry names exactly one member or status, so the period
+      // carries a single assignment. Its fronting type is a tier within this
+      // period, which is what front_role is for, rather than free text.
+      const typeName = typeNames.get(nonEmpty(f.fronting_type_id) ?? '') ?? legacyType
+      const viaStatus = !memberRef && !!statusRef
+
       opFrontPeriods.push({
         id: newUUID(),
         system_id: systemId,
-        member_id: memberPp,
         started_at: started,
         ended_at: ended,
-        comment: frontComment(f, typeNames),
+        assignments: [{
+          member_id: memberPp,
+          front_role: frontRole(typeName, viaStatus),
+          note: nonEmpty(f.note),
+          source_refs: [sourceRef('front_entries', nonEmpty(f.id))],
+          // BerryTree's fronting types are user-editable, so an unmapped one
+          // keeps its original name rather than disappearing into "unknown".
+          extensions: typeName ? { berrytree: { fronting_type: typeName } } : {},
+        }],
+        status: nonEmpty(f.custom_status),
+        note: null,
+        source_kind: 'interval',
         source_refs: [sourceRef('front_entries', nonEmpty(f.id))],
         extensions: {},
       })
@@ -576,6 +690,13 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
     if (missingRef) {
       emit({ level: 'warning', code: 'bt_front_no_ref', count: missingRef,
         message: `${missingRef} front entr(ies) named neither a member nor a custom status and were skipped.` })
+    }
+    if (typeOnly) {
+      emit({ level: 'warning', code: 'bt_front_type_only', count: typeOnly,
+        message:
+          `${typeOnly} front entr(ies) from an older BerryTree version recorded only a fronting type ` +
+          '(such as Co-conscious), with no member or status, so there was no one to attach them to and ' +
+          'they were skipped.' })
     }
     if (unresolved) {
       emit({ level: 'warning', code: 'bt_front_unresolved_ref', count: unresolved,
@@ -616,18 +737,31 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
       count: assets.uriOnly,
       message:
         `${assets.uriOnly} image(s) are referenced by URL rather than embedded, so the file is not ` +
-        'self-contained. BerryTree\'s servers have been unreachable since around August 2026, so ' +
-        'these URLs are unlikely to resolve.',
+        'self-contained. Most point at BerryTree\'s own image storage, which belongs to an app ' +
+        'whose server has been unreachable since around August 2026, so they may stop resolving ' +
+        'at any time. This converter does not download them.',
     })
   }
-  if (avatarsDropped) {
+  if (imagesNotSelected) {
+    emit({
+      level: 'info',
+      code: 'bt_images_not_selected',
+      count: imagesNotSelected,
+      message:
+        `${imagesNotSelected} image(s) saved inside the export (avatars, banners or status images) ` +
+        'were left out because Images was not selected.',
+    })
+  }
+  if (has('images')) cb.updateTask('images', { status: 'done', count: assets.embedded })
+  if (imagesDropped) {
     emit({
       level: 'warning',
       code: 'bt_avatar_unresolvable',
-      count: avatarsDropped,
+      count: imagesDropped,
       message:
-        `${avatarsDropped} avatar reference(s) were not absolute URLs, so they could not be carried ` +
-        'as a resolvable reference and were dropped.',
+        `${imagesDropped} image reference(s) (avatars, banners or status images) were neither an ` +
+        'absolute URL nor an embedded image this converter could read, so they were dropped rather ' +
+        'than written out as something that cannot resolve.',
     })
   }
 
@@ -701,30 +835,58 @@ export const runBerrytreeToPp: ConverterFn = async (input, options, cb) => {
 }
 
 /** Only emit the namespace when it actually carries something, so a system
- *  with neither pronouns nor an emoji doesn't get an empty stub. */
-function systemExtensions(pronouns: string | null, emoji: string | null) {
-  const bt: Record<string, string> = {}
-  if (pronouns) bt.pronouns = pronouns
-  if (emoji) bt.emoji = emoji
+ *  with none of these doesn't get an empty stub. */
+function systemExtensions(fields: Record<string, string | string[] | null>) {
+  const bt: Record<string, string | string[]> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (value && (!Array.isArray(value) || value.length)) bt[key] = value
+  }
   return Object.keys(bt).length ? { berrytree: bt } : {}
 }
 
-/** Front comment: the fronting type's name, BerryTree's own status text and
- *  any note, joined. v0.1 has no first-class fronting-type vocabulary, so
- *  the type name rides along here rather than being dropped. */
-function frontComment(f: BtFrontEntry, typeNames: Map<string, string>): string | null {
-  const parts = [
-    typeNames.get(nonEmpty(f.fronting_type_id) ?? ''),
-    nonEmpty(f.custom_status),
-    nonEmpty(f.note),
-  ].filter((p): p is string => !!p)
-  return parts.length ? parts.join(' - ') : null
+/** Non-empty strings from a list, deduplicated case-insensitively the way
+ *  the app does. Anything that is not a list gives an empty one. */
+function stringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const entry of raw) {
+    const value = nonEmpty(entry)
+    if (!value || seen.has(value.toLowerCase())) continue
+    seen.add(value.toLowerCase())
+    out.push(value)
+  }
+  return out
+}
+
+/**
+ * BerryTree's fronting-type vocabulary onto the spec's recommended
+ * `front_role` values. The default set ships as Fronting, Co-fronting,
+ * Co-conscious, Blurry and Influencing, but the vocabulary is user-editable,
+ * so anything unrecognised becomes "unknown" and keeps its original name in
+ * the assignment's extensions rather than being guessed into a neighbour.
+ */
+const FRONT_ROLES: Record<string, string> = {
+  'fronting': 'primary',
+  'co-fronting': 'co_front',
+  'cofronting': 'co_front',
+  'co-conscious': 'co_conscious',
+  'coconscious': 'co_conscious',
+  'influencing': 'influencing',
+}
+
+function frontRole(typeName: string | null, viaCustomStatus: boolean): string {
+  // A standalone fronting entity rather than a person: exactly what the
+  // spec's "custom_status" role is for.
+  if (viaCustomStatus) return 'custom_status'
+  if (!typeName) return 'member'
+  return FRONT_ROLES[typeName.trim().toLowerCase()] ?? 'unknown'
 }
 
 export const converter = defineConverter({
   sourceId: 'berrytree',
   destinationId: 'pluralport_v0.1',
-  modules: ['members', 'custom_fronts', 'groups', 'tags', 'custom_fields', 'fronting'],
+  modules: ['members', 'custom_fronts', 'groups', 'tags', 'custom_fields', 'fronting', 'images'],
   inspect: (fileText) => {
     const data = parseBerrytree(fileText)
     return { label: systemLabel(data), counts: countBerrytree(data) }

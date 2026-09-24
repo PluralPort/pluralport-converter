@@ -357,7 +357,9 @@ export const runAmpersandToOp: ConverterFn = async (input, options, cb) => {
         }],
         status: f.customStatus ?? null,
         note: null,
-        source_kind: 'entry',
+        // Ampersand stores startTime/endTime pairs, so these are intervals.
+        // "entry" was not one of the spec's source_kind values.
+        source_kind: 'interval',
         source_refs: [sourceRef('frontingEntries', id)],
         extensions: { ampersand: { isMainFronter: f.isMainFronter ?? false, isLocked: f.isLocked ?? false } },
       })

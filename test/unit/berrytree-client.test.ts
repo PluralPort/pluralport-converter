@@ -101,8 +101,8 @@ describe('memberFolderIds', () => {
 })
 
 describe('mainContext and systemLabel', () => {
-  // The profile is not on the `system` object, which carries little more
-  // than a username and an account email.
+  // The name the app edits is the account `system_name`; the main context's
+  // name is a signup default, used when the account name is empty.
   it('prefers the context whose kind is main', () => {
     const data = {
       system_contexts: [
@@ -112,6 +112,14 @@ describe('mainContext and systemLabel', () => {
     } as BtExport
     expect(mainContext(data).name).toBe('Real')
     expect(systemLabel(data)).toBe('Real')
+  })
+
+  it('prefers the account system_name the app edits over the context name', () => {
+    const data = {
+      system: { system_name: 'Edited', username: 'UN' },
+      system_contexts: [{ id: '1', kind: 'main', name: 'Signup Default' }],
+    } as BtExport
+    expect(systemLabel(data)).toBe('Edited')
   })
 
   it('falls back to the first context, then system_name, then username', () => {
@@ -194,6 +202,7 @@ describe('countBerrytree', () => {
       groups: 1,
       tags: 0,
       custom_fields: 0,
+      images: 0,
     })
   })
 })
