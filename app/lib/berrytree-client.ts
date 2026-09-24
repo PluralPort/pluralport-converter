@@ -9,11 +9,24 @@
  * EXPERIMENTAL, and deliberately narrow. The format was derived from a
  * single synthetic export with most sections empty, from an app that has
  * been pulled from Google Play with its server unreachable since roughly
- * August 2026, so there is no way to generate more samples. We map only the
+ * August 2026, so there is no way to generate more samples, plus analysis
+ * of the last public Android client (1.0.16), which settles how the app
+ * reads and writes several fields the sample left empty. We map only the
  * sections that sample actually demonstrates:
  *
- *     members, custom_statuses, front_entries, folders, and the main
- *     system_context's profile fields
+ *     members, custom_statuses, front_entries, folders, and the system
+ *     profile (account settings first, then the main system_context)
+ *
+ * What the client analysis settled, for the parsing below:
+ *   - member `tags` are plain strings;
+ *   - member `custom_fields` are inline `{label, value, type?, template_id?}`;
+ *   - image fields hold a base64 `data:` URI (what the editor submits), a
+ *     URL on BerryTree's public image bucket (`https://pub-<id>.r2.dev/`),
+ *     or another external URL;
+ *   - older versions recorded a front's fronting type as `custom_status_id`
+ *     pointing at a `kind: "type"` row, not as `fronting_type_id`.
+ * The tolerant parsing of other shapes stays, because the export is written
+ * by the server and can differ from what the client sends.
  *
  * Everything else is COUNTED and REPORTED, never guessed at. An export
  * carrying 400 journal entries produces a warning naming the number and
@@ -103,11 +116,19 @@ export interface BtSystemContext {
   [k: string]: unknown
 }
 
+/** Account settings. The app edits the system profile here, as
+ *  `system_description`, `system_avatar`, `system_banner`, `system_tags`,
+ *  `system_status` and `system_custom_fields`. */
+export interface BtUserSettings {
+  [k: string]: unknown
+}
+
 export interface BtExport {
   app?: unknown
   schema_version?: number
   exported_at?: string
   system?: { username?: string; system_name?: string; [k: string]: unknown }
+  user_settings?: BtUserSettings
   members?: BtMember[]
   front_entries?: BtFrontEntry[]
   custom_statuses?: BtCustomStatus[]
@@ -148,8 +169,9 @@ export const MEMBER_TEXT_ATTRS: readonly (readonly [string, string])[] = [
 ] as const
 
 /** Keys a BerryTree custom-field entry might carry its name/value under. The
- *  sample's `custom_fields` arrays are all empty, so this is tolerant by
- *  necessity; anything yielding neither is counted, not guessed at. */
+ *  app writes `label` and `value`; the other keys stay because the export
+ *  is a server-side dump we have never seen populated. Anything yielding
+ *  neither is counted, not guessed at. */
 export const FIELD_NAME_KEYS = ['name', 'label', 'title', 'key'] as const
 export const FIELD_VALUE_KEYS = ['value', 'text', 'content'] as const
 
@@ -195,8 +217,8 @@ export function isTemplate(m: BtMember): boolean {
   return m.is_template === true
 }
 
-/** Tag names off a member row. `tags` is empty in every sample we have, so
- *  both plausible shapes are accepted: plain names, or objects naming one. */
+/** Tag names off a member row. The app stores plain strings; objects naming
+ *  a tag are still accepted, since no populated export has been seen. */
 export function memberTagNames(m: BtMember): string[] {
   if (!Array.isArray(m.tags)) return []
   const out: string[] = []
@@ -232,14 +254,43 @@ export function memberFolderIds(m: BtMember): string[] {
 }
 
 /**
- * The main `system_contexts` row. BerryTree keeps the system's own profile
- * (name, description, avatar, colour, tag, pronouns) there rather than on
- * the thin top-level `system` object, which carries little more than a
- * username and an account email.
+ * The main `system_contexts` row. Carries a profile (name, description,
+ * avatar, colour, tag, pronouns), but see {@link profileValue} for why it is
+ * the fallback source for the fields the app edits rather than the first one.
  */
 export function mainContext(data: BtExport): BtSystemContext {
   const contexts = coll<BtSystemContext>(data, 'system_contexts')
   return contexts.find(c => c.kind === 'main') ?? contexts[0] ?? {}
+}
+
+export function userSettings(data: BtExport): BtUserSettings {
+  const raw = data.user_settings
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+}
+
+/**
+ * One system-profile field, from wherever the user actually edited it.
+ *
+ * BerryTree keeps a system profile in two places. The last public Android
+ * client (1.0.16) reads and writes it only as account settings
+ * (`user_settings.system_description`, `.system_avatar`, ...), and never
+ * references `system_contexts` at all; the main context is a server-side
+ * model that the one export we have shows holding defaults written at
+ * signup. So an edit made in the app lands in `user_settings`, and the
+ * context is the fallback for a file where that is empty.
+ */
+export function profileValue(data: BtExport, settingsKey: string, contextKey: string): string | null {
+  return nonEmpty(userSettings(data)[settingsKey]) ?? nonEmpty(mainContext(data)[contextKey])
+}
+
+/** System name: the top-level `system_name` (which the app edits directly),
+ *  else the main context's name, else the account `username`. */
+export function systemName(data: BtExport): string | null {
+  return (
+    nonEmpty(data.system?.system_name) ??
+    nonEmpty(mainContext(data).name) ??
+    nonEmpty(data.system?.username)
+  )
 }
 
 /**
@@ -333,15 +384,31 @@ export function parseBerrytree(text: string): BtExport {
   return obj
 }
 
-/** Display name: the main context's name, else the top-level `system_name`,
- *  else the account `username`. */
+/** Display name for the configure step. Same precedence as the
+ *  converted system's name, see {@link systemName}. */
 export function systemLabel(data: BtExport): string {
-  return (
-    nonEmpty(mainContext(data).name) ||
-    nonEmpty(data.system?.system_name) ||
-    nonEmpty(data.system?.username) ||
-    'BerryTree system'
-  )
+  return systemName(data) ?? 'BerryTree system'
+}
+
+/** A `data:` URI, the image BerryTree's editor stores inline. Cheap prefix
+ *  check for counting; the converter validates the payload itself. */
+export function isEmbeddedImage(value: unknown): boolean {
+  return typeof value === 'string' && /^data:/i.test(value.trim())
+}
+
+/** Embedded images across the system profile, members and custom statuses:
+ *  what the images module would carry. */
+export function embeddedImageCount(data: BtExport): number {
+  const [, customFronts] = splitCustomStatuses(data)
+  const values: unknown[] = [
+    profileValue(data, 'system_avatar', 'avatar'),
+    profileValue(data, 'system_banner', 'banner'),
+  ]
+  for (const m of coll<BtMember>(data, 'members')) {
+    if (!isTemplate(m)) values.push(m.avatar, m.banner)
+  }
+  for (const s of customFronts) values.push(s.avatar ?? s.image_url)
+  return values.filter(isEmbeddedImage).length
 }
 
 /** Per-module counts for the configure step. Templates are excluded from the
@@ -370,6 +437,7 @@ export function countBerrytree(data: BtExport): Record<string, number> {
     groups: sectionLen(data, 'folders'),
     tags: tagNames.size,
     custom_fields: fieldCount,
+    images: embeddedImageCount(data),
   }
 }
 
