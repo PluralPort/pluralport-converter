@@ -121,11 +121,28 @@ describe('PluralKit converter: members', () => {
     expect(alpha.privacy.visibility).toBe(expected)
   })
 
-  it('keeps the HID so a round-trip can find its way back', async () => {
+  it('puts both identifiers in source_refs, where the spec has slots for them', async () => {
     const { envelope } = await run(pluralkitConverter, sample())
     const alpha = envelope.members.find((m: { name: string }) => m.name === 'Alpha')
-    expect(alpha.source_refs[0]).toEqual({ app: 'pluralkit', collection: 'members', id: 'aaaaa' })
-    expect(alpha.extensions.pluralkit.hid).toBe('aaaaa')
+    // SourceRef carries `id` and `uuid`, so an importer matching records back
+    // to PluralKit does not have to know our extensions namespace.
+    expect(alpha.source_refs[0]).toEqual({
+      app: 'pluralkit', collection: 'members', id: 'aaaaa', uuid: 'm-uuid-a',
+    })
+    expect(alpha.extensions.pluralkit).not.toHaveProperty('hid')
+    expect(alpha.extensions.pluralkit).not.toHaveProperty('uuid')
+  })
+
+  it('omits uuid from the ref when the export has none', async () => {
+    const { envelope } = await run(pluralkitConverter, sample())
+    const beta = envelope.members.find((m: { name: string }) => m.name === 'Beta')
+    expect(beta.source_refs[0]).toEqual({ app: 'pluralkit', collection: 'members', id: 'bbbbb' })
+  })
+
+  it('emits the spec GroupMembership shape', async () => {
+    const { envelope } = await run(pluralkitConverter, sample())
+    const gm = envelope.group_memberships[0]
+    expect(Object.keys(gm).sort()).toEqual(['group_id', 'id', 'member_id', 'sort_order', 'source_refs'])
   })
 })
 

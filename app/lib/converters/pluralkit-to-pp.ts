@@ -57,6 +57,21 @@ function newUUID(): string {
 interface SourceApp { sourceId: string; appName: string; appId: string }
 
 /**
+ * PK records carry both a short ID and a real UUID. SourceRef has a slot
+ * for each, so both travel in the reference rather than the UUID being
+ * tucked into extensions: an importer trying to match records back to the
+ * source app should not have to know our namespace to find them.
+ */
+function pkRef(app: SourceApp, collection: string, hid?: string | null, uuid?: string | null) {
+  return {
+    app: app.appId,
+    collection,
+    id: hid ?? null,
+    ...(uuid ? { uuid } : {}),
+  }
+}
+
+/**
  * Avatars and banners are CDN URLs, so only a `uri` can be recorded: the
  * bytes are not in the export and this converter never fetches anything.
  * The spec requires an asset carrying only `uri` to emit `asset_uri_only`.
@@ -136,13 +151,12 @@ function makeRun(app: SourceApp): ConverterFn {
     cb.updateTask('system', { status: 'running' })
     const systemId = newUUID()
 
-    // Linked Discord accounts and similar app-specific data have no v0.1
-    // core home. The spec lists a `proxy` optional module for account links
-    // but does not define its record shape in v0.1, so inventing one would
-    // be guessing. Namespaced extensions is where app-specific data belongs.
+    // Linked Discord accounts have no v0.1 core home. The spec lists a
+    // `proxy` optional module for account links but does not define its
+    // record shape in v0.1, so inventing one would be guessing. Namespaced
+    // extensions is where app-specific data belongs; identifiers are not
+    // app-specific and live in source_refs instead.
     const systemExtras: Record<string, unknown> = {}
-    if (nonEmpty(data.id)) systemExtras.hid = nonEmpty(data.id)
-    if (nonEmpty(data.uuid)) systemExtras.uuid = nonEmpty(data.uuid)
     if (Array.isArray(data.accounts) && data.accounts.length) {
       systemExtras.accounts = data.accounts
     }
@@ -160,7 +174,7 @@ function makeRun(app: SourceApp): ConverterFn {
       archived: false,
       privacy: { visibility: pkVisibility(data.privacy), source: data.privacy ?? {} },
       settings: {},
-      source_refs: [sourceRef('system', nonEmpty(data.id))],
+      source_refs: [pkRef(app, 'system', nonEmpty(data.id), nonEmpty(data.uuid))],
       extensions: {
         [app.appId]: {
           ...systemExtras,
@@ -205,11 +219,9 @@ function makeRun(app: SourceApp): ConverterFn {
           created_at: pkTime(m.created),
           sort_order: null,
           privacy: { visibility: pkVisibility(m.privacy), source: m.privacy ?? {} },
-          source_refs: [sourceRef('members', hid)],
+          source_refs: [pkRef(app, 'members', hid, nonEmpty(m.uuid))],
           extensions: {
             [app.appId]: {
-              ...(hid ? { hid } : {}),
-              ...(nonEmpty(m.uuid) ? { uuid: nonEmpty(m.uuid) } : {}),
               ...(typeof m.keep_proxy === 'boolean' ? { keep_proxy: m.keep_proxy } : {}),
               ...(nonEmpty(m.webhook_avatar_url) ? { webhook_avatar_url: nonEmpty(m.webhook_avatar_url) } : {}),
             },
@@ -249,11 +261,9 @@ function makeRun(app: SourceApp): ConverterFn {
           // PluralKit groups do not nest.
           parent_group_id: null,
           sort_order: null,
-          source_refs: [sourceRef('groups', hid)],
+          source_refs: [pkRef(app, 'groups', hid, nonEmpty(g.uuid))],
           extensions: {
             [app.appId]: {
-              ...(hid ? { hid } : {}),
-              ...(nonEmpty(g.uuid) ? { uuid: nonEmpty(g.uuid) } : {}),
               ...(nonEmpty(g.display_name) ? { display_name: nonEmpty(g.display_name) } : {}),
               ...(nonEmpty(g.icon) ? { icon: nonEmpty(g.icon) } : {}),
             },
@@ -267,8 +277,8 @@ function makeRun(app: SourceApp): ConverterFn {
             id: newUUID(),
             group_id: groupId,
             member_id: memberPp,
+            sort_order: null,
             source_refs: [sourceRef('groups', hid)],
-            extensions: {},
           })
         }
       }
